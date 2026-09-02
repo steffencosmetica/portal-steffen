@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCart } from '@/lib/context/CartContext';
@@ -42,6 +42,16 @@ export function CatalogoClient({
 }: CatalogoClientProps) {
   const searchParams = useSearchParams();
   const vistaParam = searchParams?.get('vista')?.toLowerCase() === 'packs' ? 'PACKS' : 'PRODUCTOS';
+  const etiquetaParam = searchParams?.get('etiqueta') || '';
+
+  const normalizarEtiquetaUrl = (val: string): string => {
+    if (!val) return 'TODAS';
+    const lower = val.toLowerCase().trim();
+    if (lower.includes('trabajar') || lower.includes('steffen')) return 'Trabajar Steffen';
+    if (lower.includes('reventa') || lower.includes('vender') || lower.includes('salon') || lower.includes('salón')) return 'Reventa';
+    if (lower.includes('rutina') || lower.includes('tratamiento') || lower.includes('cabello')) return 'Rutinas de tratamiento';
+    return 'TODAS';
+  };
 
   const [vistaActiva, setVistaActiva] = useState<VistaCatalogo>(vistaParam);
   const [prevVistaParam, setPrevVistaParam] = useState<VistaCatalogo>(vistaParam);
@@ -53,8 +63,18 @@ export function CatalogoClient({
 
   const [busqueda, setBusqueda] = useState<string>('');
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<string>('TODAS');
-  const [etiquetaPackSeleccionada, setEtiquetaPackSeleccionada] = useState<string>('TODAS');
+  const [etiquetaPackSeleccionada, setEtiquetaPackSeleccionada] = useState<string>(() => normalizarEtiquetaUrl(etiquetaParam));
   const [orden, setOrden] = useState<CriterioOrden>('destacados');
+
+  useEffect(() => {
+    if (etiquetaParam) {
+      const match = normalizarEtiquetaUrl(etiquetaParam);
+      if (match !== 'TODAS') {
+        setEtiquetaPackSeleccionada(match);
+        setVistaActiva('PACKS');
+      }
+    }
+  }, [etiquetaParam]);
   const { agregarItem, cantidadTotal } = useCart();
 
   const [toastMensaje, setToastMensaje] = useState<string | null>(null);
