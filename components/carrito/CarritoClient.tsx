@@ -63,13 +63,18 @@ export function CarritoClient({
   const [isSincronizando, startFetchTransition] = useTransition();
   const [isConfirmando, setIsConfirmando] = useState<boolean>(false);
 
-  // Datos opcionales para compradores invitados (sin sesión)
+  // Datos para compradores invitados (sin sesión)
   const [datosInvitado, setDatosInvitado] = useState({
     nombre: '',
     localidad: '',
     telefono: '',
     salon: '',
   });
+  const [erroresInvitado, setErroresInvitado] = useState<{
+    nombre?: boolean;
+    localidad?: boolean;
+    telefono?: boolean;
+  }>({});
 
   // Sincronizar el usuarioId en el contexto
   useEffect(() => {
@@ -215,6 +220,27 @@ export function CarritoClient({
   const handleConfirmarPedido = async () => {
     if (items.length === 0 || isConfirmando) return;
 
+    // Validación estricta de campos obligatorios para usuarios invitados (sin login)
+    if (!usuarioLogueado) {
+      const errores: { nombre?: boolean; localidad?: boolean; telefono?: boolean } = {};
+      if (!datosInvitado.nombre || datosInvitado.nombre.trim().length < 2) {
+        errores.nombre = true;
+      }
+      if (!datosInvitado.localidad || datosInvitado.localidad.trim().length < 2) {
+        errores.localidad = true;
+      }
+      if (!datosInvitado.telefono || datosInvitado.telefono.trim().length < 5) {
+        errores.telefono = true;
+      }
+
+      if (Object.keys(errores).length > 0) {
+        setErroresInvitado(errores);
+        setErrorConfirmacion('Por favor completá los campos de contacto obligatorios (*) para continuar con tu pedido.');
+        return;
+      }
+    }
+
+    setErroresInvitado({});
     setErrorConfirmacion(null);
     setIsConfirmando(true);
 
@@ -579,46 +605,103 @@ export function CarritoClient({
               </div>
             </div>
 
-            {/* Datos opcionales para compradores sin sesión */}
+            {/* Datos obligatorios para compradores sin sesión */}
             {!usuarioLogueado && (
-              <div className="pt-3 border-t border-neutral-200 space-y-2.5">
+              <div className="pt-3.5 border-t border-neutral-200 space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-neutral-700 flex items-center gap-1.5">
+                  <label className="text-xs font-bold text-neutral-800 flex items-center gap-1.5">
                     <User className="w-3.5 h-3.5 text-gold-600" />
                     <span>Datos de contacto</span>
-                    <span className="text-[10px] font-normal text-neutral-400">(opcional)</span>
                   </label>
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                    Campos obligatorios (*)
+                  </span>
                 </div>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    id="input-invitado-nombre"
-                    placeholder="Tu nombre o salón"
-                    value={datosInvitado.nombre}
-                    onChange={(e) => setDatosInvitado({ ...datosInvitado, nombre: e.target.value })}
-                    className="w-full text-xs px-3 py-2 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-gold-500/20 focus:border-gold-500 bg-white placeholder:text-neutral-400"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
+
+                <div className="space-y-2.5">
+                  <div>
+                    <label htmlFor="input-invitado-nombre" className="block text-[11px] font-semibold text-neutral-600 mb-1">
+                      Nombre y apellido o Salón <span className="text-red-500 font-bold">*</span>
+                    </label>
                     <input
                       type="text"
-                      id="input-invitado-localidad"
-                      placeholder="Localidad / Ciudad"
-                      value={datosInvitado.localidad}
-                      onChange={(e) => setDatosInvitado({ ...datosInvitado, localidad: e.target.value })}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-gold-500/20 focus:border-gold-500 bg-white placeholder:text-neutral-400"
+                      id="input-invitado-nombre"
+                      placeholder="Ej. María Gómez / Salón Elegance"
+                      value={datosInvitado.nombre}
+                      onChange={(e) => {
+                        setDatosInvitado({ ...datosInvitado, nombre: e.target.value });
+                        if (erroresInvitado.nombre) {
+                          setErroresInvitado((prev) => ({ ...prev, nombre: false }));
+                        }
+                      }}
+                      className={`w-full text-xs px-3 py-2 rounded-xl border transition-colors focus:outline-none focus:ring-2 ${
+                        erroresInvitado.nombre
+                          ? 'border-red-400 bg-red-50/30 focus:border-red-500 focus:ring-red-500/20'
+                          : 'border-neutral-200 bg-white focus:ring-gold-500/20 focus:border-gold-500'
+                      } placeholder:text-neutral-400`}
                     />
-                    <input
-                      type="tel"
-                      id="input-invitado-telefono"
-                      placeholder="WhatsApp / Teléfono"
-                      value={datosInvitado.telefono}
-                      onChange={(e) => setDatosInvitado({ ...datosInvitado, telefono: e.target.value })}
-                      className="w-full text-xs px-3 py-2 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-gold-500/20 focus:border-gold-500 bg-white placeholder:text-neutral-400"
-                    />
+                    {erroresInvitado.nombre && (
+                      <p className="text-[11px] text-red-500 mt-1">Por favor ingresá tu nombre o salón.</p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label htmlFor="input-invitado-localidad" className="block text-[11px] font-semibold text-neutral-600 mb-1">
+                        Localidad / Ciudad <span className="text-red-500 font-bold">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        id="input-invitado-localidad"
+                        placeholder="Ej. Mar del Plata"
+                        value={datosInvitado.localidad}
+                        onChange={(e) => {
+                          setDatosInvitado({ ...datosInvitado, localidad: e.target.value });
+                          if (erroresInvitado.localidad) {
+                            setErroresInvitado((prev) => ({ ...prev, localidad: false }));
+                          }
+                        }}
+                        className={`w-full text-xs px-3 py-2 rounded-xl border transition-colors focus:outline-none focus:ring-2 ${
+                          erroresInvitado.localidad
+                            ? 'border-red-400 bg-red-50/30 focus:border-red-500 focus:ring-red-500/20'
+                            : 'border-neutral-200 bg-white focus:ring-gold-500/20 focus:border-gold-500'
+                        } placeholder:text-neutral-400`}
+                      />
+                      {erroresInvitado.localidad && (
+                        <p className="text-[11px] text-red-500 mt-1">Ingresá tu localidad.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label htmlFor="input-invitado-telefono" className="block text-[11px] font-semibold text-neutral-600 mb-1">
+                        WhatsApp / Teléfono <span className="text-red-500 font-bold">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        id="input-invitado-telefono"
+                        placeholder="Ej. 223 123 4567"
+                        value={datosInvitado.telefono}
+                        onChange={(e) => {
+                          setDatosInvitado({ ...datosInvitado, telefono: e.target.value });
+                          if (erroresInvitado.telefono) {
+                            setErroresInvitado((prev) => ({ ...prev, telefono: false }));
+                          }
+                        }}
+                        className={`w-full text-xs px-3 py-2 rounded-xl border transition-colors focus:outline-none focus:ring-2 ${
+                          erroresInvitado.telefono
+                            ? 'border-red-400 bg-red-50/30 focus:border-red-500 focus:ring-red-500/20'
+                            : 'border-neutral-200 bg-white focus:ring-gold-500/20 focus:border-gold-500'
+                        } placeholder:text-neutral-400`}
+                      />
+                      {erroresInvitado.telefono && (
+                        <p className="text-[11px] text-red-500 mt-1">Ingresá tu teléfono.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <p className="text-[11px] text-neutral-400">
-                  Agregalos para que figuren en tu mensaje o podés completarlos directamente en el chat.
+
+                <p className="text-[11px] text-neutral-500 leading-relaxed">
+                  Necesitamos estos datos para calcular el despacho y coordinar la entrega por WhatsApp.
                 </p>
               </div>
             )}

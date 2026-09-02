@@ -240,6 +240,20 @@ export async function confirmarPedidoAction(
       }
     }
 
+    // Si el usuario no está autenticado como cliente profesional, los datos de contacto son obligatorios
+    if (!cliente) {
+      const nombreValido = datosInvitado?.nombre && datosInvitado.nombre.trim().length >= 2;
+      const localidadValida = datosInvitado?.localidad && datosInvitado.localidad.trim().length >= 2;
+      const telefonoValido = datosInvitado?.telefono && datosInvitado.telefono.trim().length >= 5;
+
+      if (!nombreValido || !localidadValida || !telefonoValido) {
+        return {
+          success: false,
+          error: 'Por favor completá todos los datos de contacto obligatorios: Nombre, Localidad/Ciudad y Teléfono de contacto.',
+        };
+      }
+    }
+
     // 2. Validar que la lista de ítems no esté vacía
     if (!itemsCliente || !Array.isArray(itemsCliente) || itemsCliente.length === 0) {
       return {
