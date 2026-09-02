@@ -1,0 +1,6 @@
+{
+  "name": "Portal Profesional Steffen",
+  "description": "Plataforma B2B para salones profesionales de Steffen Cosmética Capilar. Gestión de catálogo, clientes, reglas de descuento y pedidos directos vía WhatsApp.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

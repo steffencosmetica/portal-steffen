@@ -1,0 +1,356 @@
+// Prisma Schema - Portal Profesional Steffen
+// Base de datos: PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -----------------------------------------------------------------------------
+// ENUMS
+// -----------------------------------------------------------------------------
+
+enum Rol {
+  CLIENTE_PROFESIONAL
+  ADMIN
+}
+
+enum EstadoCliente {
+  PENDIENTE_APROBACION
+  ACTIVO
+  INACTIVO
+  BLOQUEADO
+}
+
+enum EstadoZona {
+  SIN_DISTRIBUIDOR
+  COBERTURA_PARCIAL
+  CON_DISTRIBUIDOR
+}
+
+enum TipoDescuento {
+  PRIMER_PEDIDO
+  REPOSICION
+}
+
+enum EstadoPedido {
+  CARRITO
+  PEDIDO_RECIBIDO
+  CONTACTADO
+  PAGO_PENDIENTE
+  PAGADO
+  PREPARANDO
+  DESPACHADO
+  COMPLETADO
+  CANCELADO
+}
+
+// -----------------------------------------------------------------------------
+// MODELOS
+// -----------------------------------------------------------------------------
+
+/// Usuario del sistema (vinculado con la autenticación de Supabase Auth)
+model Usuario {
+  id          String   @id @default(uuid())
+  authUserId  String   @unique // ID del usuario en Supabase Auth (auth.users.id)
+  email       String   @unique
+  rol         Rol      @default(CLIENTE_PROFESIONAL)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  cliente     Cliente?
+
+  @@map("usuarios")
+}
+
+/// Perfil profesional de la peluquería o salón
+model Cliente {
+  id                  String        @id @default(uuid())
+  usuarioId           String?       @unique
+  usuario             Usuario?      @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  nombre              String
+  apellido            String
+  salon               String        // Nombre del salón o peluquería
+  whatsapp            String        // Teléfono con formato WhatsApp
+  email               String
+  provincia           String
+  localidad           String
+  pais                String        @default("Argentina")
+  instagram           String?
+  cuit                String?
+  tipoDeNegocio       String        // Ej: Peluquería, Salón Integral, Barbershop, Estilista Independiente
+  yaComproSteffen     Boolean       @default(false)
+  comoConocioSteffen  String?       // Redes sociales, recomendación, publicidad, etc.
+  fechaRegistro       DateTime      @default(now())
+  ultimoAcceso        DateTime      @default(now())
+
+  // Relación con Zona
+  zonaId              String?
+  zona                Zona?         @relation(fields: [zonaId], references: [id], onDelete: SetNull)
+  estadoCliente       EstadoCliente @default(PENDIENTE_APROBACION)
+
+  // Geolocalización
+  latitud             Float?
+  longitud            Float?
+
+  // Notificación de aprobación y bienvenida profesional
+  alertaAprobacionVista       Boolean   @default(false)
+
+  // Campos preparados para fidelización futura (no usar lógica aún, solo persistencia)
+  beneficioActual             String?   @default("20% OFF primer pedido")
+  fechaVencimientoBeneficio   DateTime?
+  cantidadPedidos             Int       @default(0)
+  montoAcumulado              Decimal   @default(0) @db.Decimal(12, 2)
+  nivelCliente                String?   @default("INICIAL")
+
+  // Relaciones
+  pedidos             Pedido[]
+  carritosAbandonados CarritoAbandonado[]
+  comentarios         ComentarioProducto[]
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([provincia, localidad])
+  @@index([estadoCliente])
+  @@map("clientes")
+}
+
+/// Zona geográfica para determinar asignación de distribuidor o venta directa de fábrica
+model Zona {
+  id              String      @id @default(uuid())
+  provincia       String
+  localidad       String
+  estado          EstadoZona  @default(SIN_DISTRIBUIDOR)
+
+  // Geolocalización del centro de la zona
+  latitud         Float?
+  longitud        Float?
+
+  distribuidorId  String?
+  distribuidor    Distribuidor? @relation(fields: [distribuidorId], references: [id], onDelete: SetNull)
+
+  clientes        Cliente[]
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([provincia, localidad])
+  @@map("zonas")
+}
+
+/// Distribuidor oficial autorizado de Steffen
+model Distribuidor {
+  id            String   @id @default(uuid())
+  nombre        String
+  empresa       String?
+  provincia     String
+  localidades   String   // Cobertura textual (ciudades o departamentos asignados)
+  whatsapp      String
+  estado        String   @default("ACTIVO") // ACTIVO | INACTIVO
+  observaciones String?
+
+  zonas         Zona[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("distribuidores")
+}
+
+/// Producto del catálogo profesional Steffen
+model Producto {
+  id                  String      @id @default(uuid())
+  codigo              String?     @unique
+  nombre              String
+  categoria           String      // Sérums y Cristales, Shampoo, Acondicionadores, Tratamientos, Emulsiones, Brillos, Bi-phase, Ceras, Exhibidoras, Packs
+  subcategoria        String?
+  descripcion         String      @db.Text
+  imagen              String
+  presentacion        String      // Ej: "250 ml", "1000 ml", "Pote 500 g", "Caja 12 u"
+  modoUso             String?     @db.Text // Protocolo o modo de uso profesional en salón
+  rendimientoSalon    String?     @db.Text // Rendimiento o rentabilidad estimada para el profesional en salón
+  precioPss           Decimal     @db.Decimal(10, 2) // Precio Sugerido Salón (referencia visible)
+  precioEcommerce     Decimal     @default(0) @db.Decimal(10, 2) // Precio público de referencia, cargado por el admin
+  stock               Int         @default(0)
+  variantes           String?     @db.Text // JSON con array de variantes: [{nombre, precioPss?, precioEcommerce?, stock?}]
+  etiqueta            String?     // Etiqueta de tipo de producto o combo
+  activo              Boolean     @default(true)
+  ordenVisualizacion  Int         @default(0)
+  destacado           Boolean     @default(false)
+  recomendado         Boolean     @default(false)
+
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  packItems           PackItem[]
+  pedidoItems         PedidoItem[]
+  comentarios         ComentarioProducto[]
+
+  @@index([categoria])
+  @@index([activo])
+  @@map("productos")
+}
+
+/// Comentarios y valoraciones de salones sobre productos
+model ComentarioProducto {
+  id              String    @id @default(uuid())
+  productoId      String
+  producto        Producto  @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  clienteId       String?
+  cliente         Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  nombreSalon     String
+  nombreAutor     String
+  localidad       String?
+  calificacion    Int       @default(5) // 1 a 5 estrellas
+  comentario      String    @db.Text
+  verificado      Boolean   @default(true) // Salón verificado
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([productoId])
+  @@index([createdAt])
+  @@map("comentarios_productos")
+}
+
+/// Pack promocional o combo de productos combinados
+model Pack {
+  id                    String      @id @default(uuid())
+  codigo                String?     @unique // SKU o código de pack
+  nombre                String
+  descripcion           String      @db.Text
+  imagen                String
+  etiqueta              String?     // "Trabajar Steffen" | "Reventa" | "Rutinas de tratamiento"
+  
+  // Precios diferenciados
+  precioOriginal        Decimal?    @db.Decimal(10, 2) // Precio original de lista / referencia (se muestra tachado)
+  precioDistribuidor    Decimal?    @db.Decimal(10, 2) // Precio final con distribuidor activo
+  precioDirecto         Decimal?    @db.Decimal(10, 2) // Precio final sin distribuidor activo (venta directa fábrica)
+  precioPromocional     Decimal     @db.Decimal(10, 2) // Precio base / fallback
+
+  precioPssEquivalente  Decimal?    @db.Decimal(10, 2) // Opcional / calculado (suma de PSS individual)
+  descuento             Decimal?    @db.Decimal(5, 2)  // Opcional / calculado (% descuento sobre suma PSS)
+  fechaInicio           DateTime?
+  fechaFin              DateTime?
+  activo                Boolean     @default(true)
+  destacado             Boolean     @default(false)
+  ordenVisualizacion    Int         @default(0)
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  items                 PackItem[]
+  pedidoItems           PedidoItem[]
+
+  @@map("packs")
+}
+
+/// Ítems y cantidades que componen un Pack
+model PackItem {
+  id          String    @id @default(uuid())
+  packId      String
+  pack        Pack      @relation(fields: [packId], references: [id], onDelete: Cascade)
+  productoId  String
+  producto    Producto  @relation(fields: [productoId], references: [id], onDelete: Restrict)
+  cantidad    Int       @default(1)
+
+  @@unique([packId, productoId])
+  @@map("pack_items")
+}
+
+/// Reglas de descuento dinámicas configurables desde el panel administrativo (/admin)
+/// NUNCA hardcodear porcentajes ni umbrales en el frontend ni en server actions.
+model ReglaDeDescuento {
+  id          String        @id @default(uuid())
+  tipo        TipoDescuento // PRIMER_PEDIDO | REPOSICION
+  montoDesde  Decimal?      @db.Decimal(10, 2) // En PSS (legacy para reglas por monto)
+  montoHasta  Decimal?      @db.Decimal(10, 2) // Null para montos sin límite superior (legacy)
+  diasDesde   Int?          // Días desde última compra completada (para REPOSICION)
+  diasHasta   Int?          // Días hasta del tramo (ej: 60, 90)
+  porcentaje  Decimal       @db.Decimal(5, 2) // Ej: 15.00 para 15%
+  activa      Boolean       @default(true)
+  orden       Int           @default(0)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([tipo, activa])
+  @@map("reglas_de_descuento")
+}
+
+/// Pedido realizado por un cliente profesional
+model Pedido {
+  id                      String        @id @default(uuid())
+  numeroPedido            Int           @default(autoincrement()) @unique
+  clienteId               String
+  cliente                 Cliente       @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  fecha                   DateTime      @default(now())
+  fechaCompletado         DateTime?
+  estado                  EstadoPedido  @default(CARRITO)
+
+  subtotalPss             Decimal       @db.Decimal(12, 2)
+  descuentoAplicado       Decimal       @db.Decimal(12, 2)
+  porcentajeDescuento     Decimal       @default(0) @db.Decimal(5, 2)
+  total                   Decimal       @db.Decimal(12, 2)
+
+  mensajeWhatsappGenerado String?       @db.Text
+  notas                   String?       @db.Text
+
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  items                   PedidoItem[]
+
+  @@index([clienteId])
+  @@index([estado])
+  @@map("pedidos")
+}
+
+/// Ítem de un pedido.
+/// REGLA DE INTEGRIDAD: Un PedidoItem DEBE tener exactamente uno de los dos campos seteados:
+/// o `productoId` (para productos sueltos) o `packId` (para combos/packs promocionales).
+/// Esta exclusividad mutua se valida a nivel de aplicación en las Server Actions.
+model PedidoItem {
+  id                String    @id @default(uuid())
+  pedidoId          String
+  pedido            Pedido    @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  productoId        String?
+  producto          Producto? @relation(fields: [productoId], references: [id], onDelete: SetNull)
+
+  packId            String?
+  pack              Pack?     @relation(fields: [packId], references: [id], onDelete: SetNull)
+
+  variante          String?   // Variante seleccionada (ej: "Con Bomba", "Con Tapa Disc-top")
+  cantidad          Int
+  precioUnitarioPss Decimal   @db.Decimal(10, 2)
+  subtotal          Decimal   @db.Decimal(12, 2)
+
+  @@map("pedido_items")
+}
+
+/// Carritos abandonados para seguimiento comercial desde el panel /admin
+model CarritoAbandonado {
+  id                    String    @id @default(uuid())
+  clienteId             String
+  cliente               Cliente   @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  itemsJson             String    @db.Text // JSON con el estado de ítems y cantidades
+  montoEstimado         Decimal   @default(0) @db.Decimal(12, 2)
+  fechaUltimaActividad  DateTime  @default(now())
+  recuperado            Boolean   @default(false)
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([clienteId])
+  @@index([recuperado])
+  @@map("carritos_abandonados")
+}

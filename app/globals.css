@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gold-50: #FBF3DF;
+  --color-gold-100: #F5E4B8;
+  --color-gold-300: #E8C15A;
+  --color-gold-400: #D4A82F;
+  --color-gold-500: #C9962A;
+  --color-gold-600: #B3841F;
+  --color-gold-700: #976516;
+  --color-gold-900: #5E3F0D;
+}
+
+/* Google Places Autocomplete dropdown container styling */
+.pac-container {
+  z-index: 99999 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #e5e7eb !important;
+  font-family: inherit !important;
+  margin-top: 4px !important;
+  padding: 4px 0 !important;
+  background-color: #ffffff !important;
+}
+
+.pac-item {
+  padding: 8px 14px !important;
+  font-size: 13px !important;
+  cursor: pointer !important;
+  border-top: 1px solid #f3f4f6 !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+.pac-item:hover, .pac-item-selected {
+  background-color: #FBF3DF !important;
+}
+
+.pac-item-query {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: #111827 !important;
+}
+
+.pac-matched {
+  font-weight: 700 !important;
+  color: #B3841F !important;
+}
+
