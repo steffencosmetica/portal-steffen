@@ -89,7 +89,7 @@ export function ProductosDestacadosCarousel({
   }
 
   return (
-    <section id="productos-destacados-section" className="space-y-4 my-2">
+    <section id="productos-destacados-section" className="space-y-6">
       {/* Notificación Toast flotante al agregar al carrito */}
       {toastMensaje && (
         <div
@@ -102,7 +102,7 @@ export function ProductosDestacadosCarousel({
       )}
 
       {/* Cabecera Compacta */}
-      <div className="flex items-center justify-between gap-4 pb-2 border-b border-neutral-200/80">
+      <div className="flex items-center justify-between gap-4 pb-2.5 border-b border-neutral-200/80">
         <div className="flex items-center gap-2.5">
           <div className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-gold-50 border border-gold-200/70 text-gold-700 shrink-0">
             <Sparkles className="w-3.5 h-3.5" />
@@ -127,7 +127,7 @@ export function ProductosDestacadosCarousel({
       </div>
 
       {/* Fila con Flecha Izquierda + 3 Productos en la Misma Fila + Flecha Derecha */}
-      <div className="relative flex items-center gap-2 sm:gap-3">
+      <div className="relative flex items-center gap-2 sm:gap-3 max-w-4xl sm:max-w-5xl mx-auto w-full">
         {/* Flecha Izquierda */}
         <button
           type="button"
@@ -161,10 +161,10 @@ export function ProductosDestacadosCarousel({
                         key={prod.id}
                         className="group bg-white rounded-xl border border-neutral-200/90 hover:border-gold-400 hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden h-[240px] sm:h-[260px]"
                       >
-                        {/* Imagen Compacta y Badges */}
+                        {/* Imagen con Mayor Proporción (Media Cuadradita) */}
                         <Link
                           href={`/catalogo/${prod.id}`}
-                          className="relative h-24 sm:h-28 w-full bg-neutral-100 overflow-hidden block shrink-0"
+                          className="relative h-36 sm:h-44 w-full bg-neutral-100/90 overflow-hidden block shrink-0"
                         >
                           <Image
                             src={prod.imagen}
@@ -191,10 +191,10 @@ export function ProductosDestacadosCarousel({
                           )}
                         </Link>
 
-                        {/* Textos y Detalles */}
-                        <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between">
-                          <div>
-                            <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-gold-700 truncate">
+                        {/* Textos y Detalles Optimizados y Compactos */}
+                        <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between min-h-0">
+                          <div className="space-y-0.5">
+                            <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-gold-700 truncate leading-tight">
                               {prod.categoria}
                             </span>
                             <Link href={`/catalogo/${prod.id}`} className="block">
@@ -204,8 +204,8 @@ export function ProductosDestacadosCarousel({
                             </Link>
                           </div>
 
-                          {/* Zona de Precio y Botón Agregar */}
-                          <div className="pt-1.5 border-t border-neutral-100 flex items-center justify-between gap-1 mt-1">
+                          {/* Zona de Precio y Botón Agregar Compacta */}
+                          <div className="pt-1.5 border-t border-neutral-100 flex items-center justify-between gap-1 mt-0.5">
                             <div className="min-w-0">
                               <span className="block text-[8px] sm:text-[9px] font-medium uppercase text-neutral-400 leading-none">
                                 {esProfesional ? 'Salón' : 'Público'}
@@ -250,7 +250,7 @@ export function ProductosDestacadosCarousel({
 
       {/* Indicadores de Página Minimalistas si hay más de 3 productos */}
       {totalPaginas > 1 && (
-        <div className="flex items-center justify-center gap-1.5 pt-0.5">
+        <div className="flex items-center justify-center gap-1.5 pt-1">
           {Array.from({ length: totalPaginas }).map((_, idx) => (
             <button
               key={idx}

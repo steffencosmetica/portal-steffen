@@ -422,128 +422,132 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </section>
         )}
 
-        {/* Sección de Productos Destacados (6 productos, 3 a la vez con flecha para ver los otros) */}
-        <ProductosDestacadosCarousel
-          productos={productosDestacados}
-          usuarioLogueado={!!sesion}
-          estadoCliente={cliente?.estadoCliente || null}
-        />
+        {/* Sección de Productos Destacados */}
+        <div>
+          <ProductosDestacadosCarousel
+            productos={productosDestacados}
+            usuarioLogueado={!!sesion}
+            estadoCliente={cliente?.estadoCliente || null}
+          />
+        </div>
 
-        {/* 4. Sección "Material Exclusivo para Profesionales" */}
-        {!sesion ? (
-          <section id="material-profesional-section" className="space-y-8">
-            <div className="text-center max-w-2xl mx-auto space-y-3">
-              <h2 className="text-2xl sm:text-3xl font-bold text-neutral-900 tracking-tight">
-                Material Exclusivo para Profesionales
-              </h2>
-              <p className="text-neutral-500 text-sm md:text-base">
-                Recursos técnicos, comerciales y gráficos para capacitar a tu equipo y potenciar la reventa en tu salón.
-              </p>
-            </div>
+        {/* 4. Sección "Material Exclusivo para Profesionales" / Accesos Profesionales (Separación clara y holgada) */}
+        <div className="pt-8 sm:pt-12 md:pt-16 border-t border-neutral-200/80">
+          {!sesion ? (
+            <section id="material-profesional-section" className="space-y-8">
+              <div className="text-center max-w-2xl mx-auto space-y-3">
+                <h2 className="text-2xl sm:text-3xl font-bold text-neutral-900 tracking-tight">
+                  Material Exclusivo para Profesionales
+                </h2>
+                <p className="text-neutral-500 text-sm md:text-base">
+                  Recursos técnicos, comerciales y gráficos para capacitar a tu equipo y potenciar la reventa en tu salón.
+                </p>
+              </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {materialProfesional.map((m, idx) => {
-                const IconComp = m.icono;
-                return (
-                  <div
-                    key={idx}
-                    className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm hover:border-gold-300 hover:shadow-md transition-all space-y-3"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-gold-50 border border-gold-200/60 flex items-center justify-center text-gold-700">
-                      <IconComp className="w-5 h-5" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {materialProfesional.map((m, idx) => {
+                  const IconComp = m.icono;
+                  return (
+                    <div
+                      key={idx}
+                      className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm hover:border-gold-300 hover:shadow-md transition-all space-y-3"
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-gold-50 border border-gold-200/60 flex items-center justify-center text-gold-700">
+                        <IconComp className="w-5 h-5" />
+                      </div>
+                      <h3 className="text-base font-bold text-neutral-900 leading-snug">
+                        {m.titulo}
+                      </h3>
+                      <p className="text-xs text-neutral-600 leading-relaxed">
+                        {m.descripcion}
+                      </p>
                     </div>
-                    <h3 className="text-base font-bold text-neutral-900 leading-snug">
-                      {m.titulo}
-                    </h3>
-                    <p className="text-xs text-neutral-600 leading-relaxed">
-                      {m.descripcion}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
 
-            <div className="flex justify-center pt-2">
-              <Link
-                href="/registro"
-                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all hover:scale-[1.01]"
-              >
-                <span>Ver más</span>
-                <ArrowRight className="w-4 h-4 text-gold-400" />
-              </Link>
-            </div>
-          </section>
-        ) : (
-          <section id="accesos-profesionales-section">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Tarjeta 1: Material Exclusivo para Profesionales */}
-              <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm hover:border-gold-300 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-gold-50 border border-gold-200/60 flex items-center justify-center text-gold-700">
-                    <BookOpen className="w-5 h-5" />
-                  </div>
-                  <h3 className="text-base font-bold text-neutral-900 leading-snug">
-                    Material Exclusivo para Profesionales
-                  </h3>
-                  <p className="text-xs text-neutral-600 leading-relaxed">
-                    Guías, herramientas de venta e imágenes para tu salón.
-                  </p>
-                </div>
+              <div className="flex justify-center pt-2">
                 <Link
-                  href="/recursos"
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all hover:scale-[1.01] w-full"
+                  href="/registro"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all hover:scale-[1.01]"
                 >
                   <span>Ver más</span>
                   <ArrowRight className="w-4 h-4 text-gold-400" />
                 </Link>
               </div>
-
-              {/* Tarjeta 2: Catálogo de Productos */}
-              <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm hover:border-gold-300 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-gold-50 border border-gold-200/60 flex items-center justify-center text-gold-700">
-                    <Package className="w-5 h-5" />
+            </section>
+          ) : (
+            <section id="accesos-profesionales-section">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {/* Tarjeta 1: Material Exclusivo para Profesionales */}
+                <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm hover:border-gold-300 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-gold-50 border border-gold-200/60 flex items-center justify-center text-gold-700">
+                      <BookOpen className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-base font-bold text-neutral-900 leading-snug">
+                      Material Exclusivo para Profesionales
+                    </h3>
+                    <p className="text-xs text-neutral-600 leading-relaxed">
+                      Guías, herramientas de venta e imágenes para tu salón.
+                    </p>
                   </div>
-                  <h3 className="text-base font-bold text-neutral-900 leading-snug">
-                    Catálogo de Productos
-                  </h3>
-                  <p className="text-xs text-neutral-600 leading-relaxed">
-                    Explorá la línea completa directo de fábrica.
-                  </p>
+                  <Link
+                    href="/recursos"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all hover:scale-[1.01] w-full"
+                  >
+                    <span>Ver más</span>
+                    <ArrowRight className="w-4 h-4 text-gold-400" />
+                  </Link>
                 </div>
-                <Link
-                  href="/catalogo"
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all hover:scale-[1.01] w-full"
-                >
-                  <span>Ver Productos</span>
-                  <ArrowRight className="w-4 h-4 text-gold-400" />
-                </Link>
-              </div>
 
-              {/* Tarjeta 3: Packs y Combos */}
-              <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm hover:border-gold-300 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                <div className="space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-gold-50 border border-gold-200/60 flex items-center justify-center text-gold-700">
-                    <Layers className="w-5 h-5" />
+                {/* Tarjeta 2: Catálogo de Productos */}
+                <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm hover:border-gold-300 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-gold-50 border border-gold-200/60 flex items-center justify-center text-gold-700">
+                      <Package className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-base font-bold text-neutral-900 leading-snug">
+                      Catálogo de Productos
+                    </h3>
+                    <p className="text-xs text-neutral-600 leading-relaxed">
+                      Explorá la línea completa directo de fábrica.
+                    </p>
                   </div>
-                  <h3 className="text-base font-bold text-neutral-900 leading-snug">
-                    Packs y Combos
-                  </h3>
-                  <p className="text-xs text-neutral-600 leading-relaxed">
-                    Combos promocionales armados para tu salón.
-                  </p>
+                  <Link
+                    href="/catalogo"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all hover:scale-[1.01] w-full"
+                  >
+                    <span>Ver Productos</span>
+                    <ArrowRight className="w-4 h-4 text-gold-400" />
+                  </Link>
                 </div>
-                <Link
-                  href="/catalogo?vista=packs"
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all hover:scale-[1.01] w-full"
-                >
-                  <span>Ver Packs</span>
-                  <ArrowRight className="w-4 h-4 text-gold-400" />
-                </Link>
+
+                {/* Tarjeta 3: Packs y Combos */}
+                <div className="bg-white border border-neutral-200 rounded-2xl p-5 shadow-sm hover:border-gold-300 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                  <div className="space-y-3">
+                    <div className="w-10 h-10 rounded-xl bg-gold-50 border border-gold-200/60 flex items-center justify-center text-gold-700">
+                      <Layers className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-base font-bold text-neutral-900 leading-snug">
+                      Packs y Combos
+                    </h3>
+                    <p className="text-xs text-neutral-600 leading-relaxed">
+                      Combos promocionales armados para tu salón.
+                    </p>
+                  </div>
+                  <Link
+                    href="/catalogo?vista=packs"
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition-all hover:scale-[1.01] w-full"
+                  >
+                    <span>Ver Packs</span>
+                    <ArrowRight className="w-4 h-4 text-gold-400" />
+                  </Link>
+                </div>
               </div>
-            </div>
-          </section>
-        )}
+            </section>
+          )}
+        </div>
 
         {/* 5. Sección de Descuentos para Salones (solo visible para usuarios con sesión) */}
         {sesion && tramosDescuento.length > 0 && (
