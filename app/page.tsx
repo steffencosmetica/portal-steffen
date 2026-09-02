@@ -384,6 +384,44 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </section>
         )}
 
+        {/* 3. Sección "Plataforma exclusiva" (solo para visitantes sin sesión) */}
+        {!sesion && (
+          <section id="beneficios-section" className="space-y-8 md:space-y-10">
+            <div className="text-center max-w-3xl mx-auto space-y-3">
+              <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-neutral-900 tracking-tight">
+                Plataforma exclusiva para peluquerías y salones profesionales.
+              </h2>
+              <p className="text-neutral-600 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
+                Diseñada para abastecer tu salón de manera rápida, transparente y con beneficios reales.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              {beneficios.map((b, idx) => {
+                const IconComp = b.icono;
+                return (
+                  <div
+                    key={idx}
+                    className="group bg-white border border-neutral-200/90 rounded-2xl p-6 sm:p-7 shadow-sm hover:border-gold-300 hover:shadow-md transition-all duration-300 flex items-start gap-4 sm:gap-5"
+                  >
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-neutral-950 text-gold-400 border border-neutral-800 flex items-center justify-center shrink-0 shadow-sm group-hover:bg-gold-500 group-hover:text-neutral-950 group-hover:border-gold-400 transition-all duration-300">
+                      <IconComp className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </div>
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight leading-snug group-hover:text-gold-800 transition-colors">
+                        {b.titulo}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
+                        {b.descripcion}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Sección de Packs Exclusivos */}
         <section id="seccion-packs-exclusivos" className="space-y-6 md:space-y-8">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-2 border-b border-neutral-200/80">
@@ -555,44 +593,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             </Link>
           </div>
         </section>
-
-        {/* 3. Sección "Plataforma exclusiva" (solo para visitantes sin sesión) */}
-        {!sesion && (
-          <section id="beneficios-section" className="space-y-8 md:space-y-10">
-            <div className="text-center max-w-3xl mx-auto space-y-3">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-neutral-900 tracking-tight">
-                Plataforma exclusiva para peluquerías y salones profesionales.
-              </h2>
-              <p className="text-neutral-600 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
-                Diseñada para abastecer tu salón de manera rápida, transparente y con beneficios reales.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-              {beneficios.map((b, idx) => {
-                const IconComp = b.icono;
-                return (
-                  <div
-                    key={idx}
-                    className="group bg-white border border-neutral-200/90 rounded-2xl p-6 sm:p-7 shadow-sm hover:border-gold-300 hover:shadow-md transition-all duration-300 flex items-start gap-4 sm:gap-5"
-                  >
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-neutral-950 text-gold-400 border border-neutral-800 flex items-center justify-center shrink-0 shadow-sm group-hover:bg-gold-500 group-hover:text-neutral-950 group-hover:border-gold-400 transition-all duration-300">
-                      <IconComp className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </div>
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight leading-snug group-hover:text-gold-800 transition-colors">
-                        {b.titulo}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
-                        {b.descripcion}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
 
         {/* Sección de Productos Destacados */}
         <div>
