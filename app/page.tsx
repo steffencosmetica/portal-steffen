@@ -431,8 +431,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           />
         </div>
 
-        {/* 4. Sección "Material Exclusivo para Profesionales" / Accesos Profesionales (Separación clara y holgada) */}
-        <div className="pt-8 sm:pt-12 md:pt-16 border-t border-neutral-200/80">
+        {/* 4. Sección "Material Exclusivo para Profesionales" / Accesos Profesionales */}
+        <div className="pt-2 sm:pt-4 border-t border-neutral-200/70">
           {!sesion ? (
             <section id="material-profesional-section" className="space-y-8">
               <div className="text-center max-w-2xl mx-auto space-y-3">

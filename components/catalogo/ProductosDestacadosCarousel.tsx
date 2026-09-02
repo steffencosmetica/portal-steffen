@@ -89,7 +89,7 @@ export function ProductosDestacadosCarousel({
   }
 
   return (
-    <section id="productos-destacados-section" className="space-y-6">
+    <section id="productos-destacados-section" className="space-y-4">
       {/* Notificación Toast flotante al agregar al carrito */}
       {toastMensaje && (
         <div
@@ -159,12 +159,12 @@ export function ProductosDestacadosCarousel({
                     return (
                       <div
                         key={prod.id}
-                        className="group bg-white rounded-xl border border-neutral-200/90 hover:border-gold-400 hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden h-[240px] sm:h-[260px]"
+                        className="group bg-white rounded-xl border border-neutral-200/90 hover:border-gold-400 hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden h-[290px] sm:h-[320px]"
                       >
-                        {/* Imagen con Mayor Proporción (Media Cuadradita) */}
+                        {/* Imagen con Mayor Proporción y Formato Cuadradito */}
                         <Link
                           href={`/catalogo/${prod.id}`}
-                          className="relative h-36 sm:h-44 w-full bg-neutral-100/90 overflow-hidden block shrink-0"
+                          className="relative h-44 sm:h-52 w-full bg-neutral-100/90 overflow-hidden block shrink-0"
                         >
                           <Image
                             src={prod.imagen}
@@ -191,20 +191,20 @@ export function ProductosDestacadosCarousel({
                           )}
                         </Link>
 
-                        {/* Textos y Detalles Optimizados y Compactos */}
+                        {/* Textos y Detalles */}
                         <div className="p-2 sm:p-2.5 flex-1 flex flex-col justify-between min-h-0">
                           <div className="space-y-0.5">
                             <span className="block text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-gold-700 truncate leading-tight">
                               {prod.categoria}
                             </span>
                             <Link href={`/catalogo/${prod.id}`} className="block">
-                              <h3 className="font-bold text-neutral-900 text-xs sm:text-sm line-clamp-1 leading-snug group-hover:text-gold-700 transition-colors">
+                              <h3 className="font-bold text-neutral-900 text-xs sm:text-sm line-clamp-2 leading-snug group-hover:text-gold-700 transition-colors">
                                 {prod.nombre}
                               </h3>
                             </Link>
                           </div>
 
-                          {/* Zona de Precio y Botón Agregar Compacta */}
+                          {/* Zona de Precio y Botón Agregar */}
                           <div className="pt-1.5 border-t border-neutral-100 flex items-center justify-between gap-1 mt-0.5">
                             <div className="min-w-0">
                               <span className="block text-[8px] sm:text-[9px] font-medium uppercase text-neutral-400 leading-none">
@@ -219,7 +219,7 @@ export function ProductosDestacadosCarousel({
                               type="button"
                               onClick={(e) => handleAgregarProducto(e, prod)}
                               title="Agregar al pedido"
-                              className="px-2 py-1 rounded-md bg-neutral-900 text-white hover:bg-gold-500 hover:text-neutral-950 text-[10px] sm:text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 active:scale-95"
+                              className="px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md bg-neutral-900 text-white hover:bg-gold-500 hover:text-neutral-950 text-[10px] sm:text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 active:scale-95"
                             >
                               <Plus className="w-3 h-3" />
                               <span className="hidden sm:inline">Agregar</span>
