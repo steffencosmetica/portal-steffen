@@ -23,7 +23,8 @@ import {
   Loader2,
   PackageCheck,
   Sparkles,
-  Lock
+  Lock,
+  User
 } from 'lucide-react';
 
 interface CarritoClientProps {
@@ -61,6 +62,14 @@ export function CarritoClient({
   const [errorConfirmacion, setErrorConfirmacion] = useState<string | null>(null);
   const [isSincronizando, startFetchTransition] = useTransition();
   const [isConfirmando, setIsConfirmando] = useState<boolean>(false);
+
+  // Datos opcionales para compradores invitados (sin sesión)
+  const [datosInvitado, setDatosInvitado] = useState({
+    nombre: '',
+    localidad: '',
+    telefono: '',
+    salon: '',
+  });
 
   // Sincronizar el usuarioId en el contexto
   useEffect(() => {
@@ -202,20 +211,18 @@ export function CarritoClient({
     };
   }, [items, contextCargando, quitarItem]);
 
-  // Manejo de la confirmación del pedido y envío a WhatsApp
+  // Manejo de la confirmación del pedido y envío a WhatsApp (disponible para todos, con o sin login)
   const handleConfirmarPedido = async () => {
     if (items.length === 0 || isConfirmando) return;
-
-    if (!usuarioLogueado) {
-      router.push('/login?redirect=/carrito');
-      return;
-    }
 
     setErrorConfirmacion(null);
     setIsConfirmando(true);
 
     try {
-      const resultado = await confirmarPedidoAction(items);
+      const resultado = await confirmarPedidoAction(
+        items,
+        !usuarioLogueado ? datosInvitado : undefined
+      );
 
       if (!resultado.success) {
         if (resultado.itemsRemovidosIds && resultado.itemsRemovidosIds.length > 0) {
@@ -572,6 +579,50 @@ export function CarritoClient({
               </div>
             </div>
 
+            {/* Datos opcionales para compradores sin sesión */}
+            {!usuarioLogueado && (
+              <div className="pt-3 border-t border-neutral-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-neutral-700 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-gold-600" />
+                    <span>Datos de contacto</span>
+                    <span className="text-[10px] font-normal text-neutral-400">(opcional)</span>
+                  </label>
+                </div>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    id="input-invitado-nombre"
+                    placeholder="Tu nombre o salón"
+                    value={datosInvitado.nombre}
+                    onChange={(e) => setDatosInvitado({ ...datosInvitado, nombre: e.target.value })}
+                    className="w-full text-xs px-3 py-2 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-gold-500/20 focus:border-gold-500 bg-white placeholder:text-neutral-400"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      id="input-invitado-localidad"
+                      placeholder="Localidad / Ciudad"
+                      value={datosInvitado.localidad}
+                      onChange={(e) => setDatosInvitado({ ...datosInvitado, localidad: e.target.value })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-gold-500/20 focus:border-gold-500 bg-white placeholder:text-neutral-400"
+                    />
+                    <input
+                      type="tel"
+                      id="input-invitado-telefono"
+                      placeholder="WhatsApp / Teléfono"
+                      value={datosInvitado.telefono}
+                      onChange={(e) => setDatosInvitado({ ...datosInvitado, telefono: e.target.value })}
+                      className="w-full text-xs px-3 py-2 rounded-xl border border-neutral-200 focus:outline-none focus:ring-2 focus:ring-gold-500/20 focus:border-gold-500 bg-white placeholder:text-neutral-400"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-neutral-400">
+                  Agregalos para que figuren en tu mensaje o podés completarlos directamente en el chat.
+                </p>
+              </div>
+            )}
+
             {/* Botón de Confirmación Principal */}
             <button
               id="btn-confirmar-pedido-whatsapp"
@@ -588,12 +639,23 @@ export function CarritoClient({
               ) : (
                 <>
                   <MessageSquare className="w-5 h-5" />
-                  <span>
-                    {!usuarioLogueado ? 'Iniciar Sesión y Confirmar' : 'Confirmar Pedido por WhatsApp'}
-                  </span>
+                  <span>Confirmar Pedido por WhatsApp</span>
                 </>
               )}
             </button>
+
+            {/* Acceso a inicio de sesión si tiene cuenta profesional */}
+            {!usuarioLogueado && (
+              <div className="text-center pt-1">
+                <Link
+                  href="/login?redirect=/carrito"
+                  id="link-login-desde-carrito"
+                  className="text-xs text-neutral-500 hover:text-neutral-900 underline underline-offset-2 transition-colors font-medium"
+                >
+                  ¿Ya tenés cuenta profesional? Iniciar sesión
+                </Link>
+              </div>
+            )}
 
             {/* Reglas Claras de Envío y Transferencia */}
             <div className="pt-4 border-t border-neutral-100 space-y-3">

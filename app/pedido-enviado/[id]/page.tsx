@@ -27,26 +27,109 @@ interface PedidoEnviadoPageProps {
 export default async function PedidoEnviadoPage({ params }: PedidoEnviadoPageProps) {
   const { id: pedidoId } = await params;
 
-  // 1. Obtener usuario autenticado en el servidor
+  // 1. Obtener usuario autenticado en el servidor (opcional)
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect('/login');
+  const usuario = user
+    ? await prisma.usuario.findUnique({
+        where: { authUserId: user.id },
+        include: { cliente: true },
+      })
+    : null;
+
+  // 2. Si es un pedido directo de invitado sin ID en base de datos
+  if (pedidoId === 'invitado') {
+    const whatsappUrl = generarUrlWhatsapp(
+      'Hola Steffen Cosmética Capilar! Acabo de realizar un pedido desde la web y quisiera coordinar el pago y envío.'
+    );
+
+    return (
+      <div id="pedido-enviado-root" className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col justify-between p-4 md:p-8">
+        <SiteHeader
+          salonNombre={usuario?.cliente?.salon || ''}
+          usuarioId={usuario?.id || ''}
+          sesion={!!user}
+          paginaActual="otro"
+          mostrarInicio={true}
+          mostrarCatalogo={true}
+          mostrarCarrito={false}
+        />
+
+        <main className="max-w-4xl mx-auto w-full py-8 space-y-6">
+          <div className="bg-white border border-neutral-200 rounded-3xl p-6 md:p-8 text-center space-y-4 shadow-sm">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 shadow-sm">
+              <CheckCircle2 className="w-9 h-9" />
+            </div>
+
+            <div className="space-y-1">
+              <span className="inline-block px-3 py-1 text-xs font-bold uppercase tracking-widest bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-full mb-1">
+                Pedido Enviado
+              </span>
+              <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+                ¡Tu Pedido fue Enviado a WhatsApp!
+              </h1>
+              <p className="text-neutral-500 text-sm max-w-lg mx-auto leading-relaxed">
+                Tu solicitud fue remitida a nuestro canal oficial de atención. Nuestro equipo coordinará con vos el medio de pago (transferencia bancaria) y el despacho de tus productos.
+              </p>
+            </div>
+
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                id="btn-reabrir-whatsapp"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
+              >
+                <MessageSquare className="w-4 h-4 fill-white" />
+                <span>Abrir Chat de WhatsApp</span>
+                <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
+              </a>
+
+              <Link
+                href="/catalogo"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-semibold text-sm transition-colors cursor-pointer border border-neutral-300"
+              >
+                <span>Volver al Catálogo</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Invitación a registrarse para profesionales */}
+          {!user && (
+            <div className="bg-gradient-to-r from-neutral-900 to-neutral-800 text-white rounded-3xl p-6 md:p-8 flex flex-col sm:flex-row items-center justify-between gap-5 shadow-sm">
+              <div className="space-y-1.5 text-center sm:text-left">
+                <span className="text-[11px] font-extrabold uppercase tracking-widest text-gold-400 bg-gold-400/10 px-2.5 py-0.5 rounded-full border border-gold-400/20 inline-block">
+                  Beneficio Profesional
+                </span>
+                <h3 className="text-lg md:text-xl font-bold tracking-tight">
+                  ¿Tenés un salón de peluquería o estética?
+                </h3>
+                <p className="text-xs md:text-sm text-neutral-300 max-w-lg">
+                  Registrá tu cuenta oficial de salón para acceder a un 20% OFF en tu primera compra, combos exclusivos y precios mayoristas directos de fábrica.
+                </p>
+              </div>
+              <Link
+                href="/registro"
+                className="shrink-0 px-5 py-3 rounded-xl bg-gold-500 hover:bg-gold-400 text-white font-bold text-sm transition-all shadow-md shadow-gold-500/20 cursor-pointer text-center"
+              >
+                Registrar mi Salón
+              </Link>
+            </div>
+          )}
+        </main>
+
+        <footer className="max-w-4xl mx-auto w-full py-4 text-center text-xs text-neutral-500 border-t border-neutral-200">
+          © {new Date().getFullYear()} Steffen Cosmética Capilar • Portal Profesional
+        </footer>
+      </div>
+    );
   }
 
-  const usuario = await prisma.usuario.findUnique({
-    where: { authUserId: user.id },
-    include: { cliente: true },
-  });
-
-  if (!usuario) {
-    redirect('/login');
-  }
-
-  // 2. Buscar el pedido por ID incluyendo sus ítems y datos del cliente/producto
+  // 3. Buscar el pedido por ID incluyendo sus ítems y datos del cliente/producto
   const pedido = await prisma.pedido.findUnique({
     where: { id: pedidoId },
     include: {
@@ -64,17 +147,21 @@ export default async function PedidoEnviadoPage({ params }: PedidoEnviadoPagePro
     notFound();
   }
 
-  // 3. Regla de acceso: Si es admin o es el propio cliente dueño del pedido
-  const esAdmin = usuario.rol === 'ADMIN';
-  const esPropietario = usuario.cliente && pedido.clienteId === usuario.cliente.id;
+  // 4. Regla de acceso: Permitir si es admin, el propio cliente dueño, o un pedido de invitado
+  const esAdmin = usuario?.rol === 'ADMIN';
+  const esPropietario = usuario?.cliente && pedido.clienteId === usuario.cliente.id;
+  const esPedidoInvitado = pedido.cliente?.email === 'invitado@steffen.com';
 
-  if (!esAdmin && !esPropietario) {
+  if (!esAdmin && !esPropietario && !esPedidoInvitado) {
+    if (!user) {
+      redirect('/login');
+    }
     notFound();
   }
 
-  const cliente = usuario.cliente || pedido.cliente;
+  const cliente = usuario?.cliente || pedido.cliente;
 
-  // 4. Formateadores
+  // 5. Formateadores
   const formatoMoneda = new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
@@ -86,7 +173,7 @@ export default async function PedidoEnviadoPage({ params }: PedidoEnviadoPagePro
     timeStyle: 'short',
   });
 
-  // 5. Reconstruir URL de WhatsApp con el mensaje guardado en la base de datos
+  // 6. Reconstruir URL de WhatsApp con el mensaje guardado en la base de datos
   const whatsappUrl = generarUrlWhatsapp(pedido.mensajeWhatsappGenerado || '');
 
   const subtotalPssNum = Number(pedido.subtotalPss);
@@ -98,9 +185,9 @@ export default async function PedidoEnviadoPage({ params }: PedidoEnviadoPagePro
     <div id="pedido-enviado-root" className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col justify-between p-4 md:p-8">
       {/* Header */}
       <SiteHeader
-        salonNombre={cliente.salon}
-        usuarioId={usuario.id}
-        sesion={true}
+        salonNombre={cliente?.salon || ''}
+        usuarioId={usuario?.id || ''}
+        sesion={!!user}
         paginaActual="otro"
         mostrarInicio={true}
         mostrarCatalogo={true}
