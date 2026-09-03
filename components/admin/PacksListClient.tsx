@@ -44,7 +44,12 @@ export interface PackAdminView {
   etiqueta?: string | null;
   precioPromocional: number;
   precioPssEquivalente?: number | null;
+  precioOriginal?: number | null;
   descuento?: number | null;
+  descuentoDistribuidor?: number | null;
+  descuentoDirecto?: number | null;
+  precioDistribuidor?: number | null;
+  precioDirecto?: number | null;
   fechaInicio?: string | null;
   fechaFin?: string | null;
   activo: boolean;
@@ -295,27 +300,36 @@ export function PacksListClient({ packsIniciales }: PacksListClientProps) {
                       </ul>
                     </div>
 
-                    {/* Precios */}
-                    <div className="flex items-baseline justify-between pt-2 border-t border-neutral-100">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-neutral-400 block">
-                          Precio Combo Profesional
+                    {/* Precios y Descuentos del Pack */}
+                    <div className="pt-2 border-t border-neutral-100 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-[10px] uppercase font-bold text-neutral-400">
+                          Base (Suma PSS)
                         </span>
-                        <span className="text-xl font-black text-neutral-900">
-                          {formatoMoneda.format(pack.precioPromocional)}
+                        <span className="font-bold text-neutral-700">
+                          {formatoMoneda.format(pack.precioOriginal || pack.precioPssEquivalente || pack.precioPromocional)}
                         </span>
                       </div>
 
-                      {pack.precioPssEquivalente && pack.precioPssEquivalente > pack.precioPromocional && (
-                        <div className="text-right">
-                          <span className="text-[10px] text-neutral-400 block line-through">
-                            Salón Profesional: {formatoMoneda.format(pack.precioPssEquivalente)}
+                      <div className="grid grid-cols-2 gap-1.5 pt-1">
+                        <div className="bg-emerald-50 border border-emerald-200/80 rounded-lg p-1.5">
+                          <span className="text-[9px] uppercase font-bold text-emerald-800 block">
+                            c/ Distribuidor ({pack.descuentoDistribuidor ?? 0}%)
                           </span>
-                          <span className="text-xs font-bold text-emerald-600">
-                            Ahorro: {Math.round(((pack.precioPssEquivalente - pack.precioPromocional) / pack.precioPssEquivalente) * 100)}% ({formatoMoneda.format(pack.precioPssEquivalente - pack.precioPromocional)})
+                          <span className="text-xs font-black text-emerald-950">
+                            {formatoMoneda.format(pack.precioDistribuidor || pack.precioPromocional)}
                           </span>
                         </div>
-                      )}
+
+                        <div className="bg-amber-50 border border-amber-200/80 rounded-lg p-1.5">
+                          <span className="text-[9px] uppercase font-bold text-amber-800 block">
+                            s/ Distribuidor ({pack.descuentoDirecto ?? 0}%)
+                          </span>
+                          <span className="text-xs font-black text-amber-950">
+                            {formatoMoneda.format(pack.precioDirecto || pack.precioPromocional)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

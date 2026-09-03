@@ -20,9 +20,11 @@ export interface FilaExcelPackDatos {
   etiqueta: string | null;
   descripcion: string;
   productos: string;           // Productos componentes: SKU_o_Nombre:Cantidad | SKU_o_Nombre:Cantidad
-  precioOriginal: number;      // Precio de lista original / referencia (se muestra tachado)
-  precioDistribuidor: number;  // Precio final fijo con distribuidor activo
-  precioDirecto: number;       // Precio final fijo sin distribuidor activo (venta directa fábrica)
+  descuentoConDistribuidor: number; // % Descuento para clientes con distribuidor asignado
+  descuentoSinDistribuidor: number; // % Descuento para clientes sin distribuidor asignado (venta directa fábrica)
+  precioBaseCalculado: number;      // Precio base calculado automáticamente (suma de PSS individual de los productos)
+  precioDistribuidorCalculado: number; // Precio final calculado con distribuidor activo
+  precioDirectoCalculado: number;      // Precio final calculado sin distribuidor activo (venta directa fábrica)
   activo: boolean;
   destacado: boolean;
   ordenVisualizacion: number;
@@ -196,15 +198,16 @@ export async function generarPlantillaExcelPacksAction(): Promise<{
     const workbook = XLSX.utils.book_new();
 
     // Hoja 1: Packs con filas de ejemplo
+    // Los precios ya NO se cargan manualmente: el precio base se calcula sumando los productos que incluye el pack.
+    // Solo se indican los porcentajes de descuento: descuentoConDistribuidor y descuentoSinDistribuidor.
     const headers = [
       'codigo',
       'nombre',
       'etiqueta',
       'descripcion',
       'productos',
-      'precioOriginal',
-      'precioDistribuidor',
-      'precioDirecto',
+      'descuentoConDistribuidor',
+      'descuentoSinDistribuidor',
       'activo',
       'destacado',
       'ordenVisualizacion',
@@ -217,9 +220,8 @@ export async function generarPlantillaExcelPacksAction(): Promise<{
       'Trabajar Steffen',
       'Combo profesional para lavado y tratamiento en tocador. Incluye 2 Shampoo 1000ml + 1 Máscara Nutritiva 1000g + 1 Sérum 250ml.',
       'SH-ARGAN-1000:2 | MAS-NUTRI-1000:1 | SER-ARGAN-250:1',
-      58000,
-      41000,
-      43500,
+      25, // % descuento para clientes con distribuidor asignado
+      15, // % descuento para clientes sin distribuidor asignado (venta directa fábrica)
       'SI',
       'SI',
       1,
@@ -232,9 +234,8 @@ export async function generarPlantillaExcelPacksAction(): Promise<{
       'Reventa',
       'Pack retail listo para mostrador. Diseñado para maximizar reventa y ticket promedio en salón.',
       'SER-ARGAN-250:6 | OLEO-NUTRI-60:6',
-      96000,
-      68000,
-      72000,
+      20,
+      10,
       'SI',
       'NO',
       2,
@@ -246,10 +247,9 @@ export async function generarPlantillaExcelPacksAction(): Promise<{
       'Kit Rutina Reparación Cauterizada',
       'Rutinas de tratamiento',
       'Protocolo capilar de cauterización profunda y sellado cuticular para cabellos con daño extremo o procesos químicos.',
-      'Shampoo Nutrición Total 1000ml:1 | Máscara Capilar Argán 1000g:1 | Sérum Restaurador 250ml:1',
-      42000,
-      29900,
-      31500,
+      'SH-ARGAN-1000:1 | MAS-NUTRI-1000:1 | SER-ARGAN-250:1',
+      30,
+      20,
       'SI',
       'SI',
       3,
@@ -265,9 +265,8 @@ export async function generarPlantillaExcelPacksAction(): Promise<{
       { wch: 28 }, // etiqueta
       { wch: 55 }, // descripcion
       { wch: 50 }, // productos
-      { wch: 16 }, // precioOriginal (tachado)
-      { wch: 20 }, // precioDistribuidor
-      { wch: 20 }, // precioDirecto
+      { wch: 26 }, // descuentoConDistribuidor
+      { wch: 26 }, // descuentoSinDistribuidor
       { wch: 10 }, // activo
       { wch: 12 }, // destacado
       { wch: 18 }, // ordenVisualizacion
@@ -290,26 +289,27 @@ export async function generarPlantillaExcelPacksAction(): Promise<{
 
     XLSX.utils.book_append_sheet(workbook, wsEtiquetas, 'Etiquetas_Permitidas');
 
-    // Hoja 3: Productos Disponibles para Incluir (Referencia de SKU y Nombres)
+    // Hoja 3: Productos Disponibles para Incluir (Referencia de SKU, Nombres y Precios PSS)
     try {
       const productosDB = await prisma.producto.findMany({
         where: { activo: true },
-        select: { codigo: true, nombre: true, presentacion: true, categoria: true, stock: true },
+        select: { codigo: true, nombre: true, presentacion: true, categoria: true, precioPss: true, stock: true },
         orderBy: [{ categoria: 'asc' }, { ordenVisualizacion: 'asc' }],
       });
 
       const prodsData = [
-        ['Código SKU', 'Nombre del Producto', 'Presentación', 'Categoría', 'Stock'],
+        ['Código SKU', 'Nombre del Producto', 'Presentación', 'Categoría', 'Precio Salón (PSS)', 'Stock'],
         ...productosDB.map((p) => [
           p.codigo || '—',
           p.nombre,
           p.presentacion || '—',
           p.categoria || '—',
+          Number(p.precioPss),
           p.stock,
         ]),
       ];
       const wsProds = XLSX.utils.aoa_to_sheet(prodsData);
-      wsProds['!cols'] = [{ wch: 18 }, { wch: 40 }, { wch: 18 }, { wch: 25 }, { wch: 10 }];
+      wsProds['!cols'] = [{ wch: 18 }, { wch: 40 }, { wch: 18 }, { wch: 25 }, { wch: 20 }, { wch: 10 }];
       XLSX.utils.book_append_sheet(workbook, wsProds, 'Catalogo_Productos');
     } catch {
       // Ignorar si no se puede armar la hoja de productos
@@ -396,15 +396,16 @@ export async function previsualizarCargaMasivaPacksAction(
       if (p.nombre) nombresExistentesMap.set(p.nombre.trim().toUpperCase(), p.id);
     }
 
-    // Consultar catálogo de productos para validar columna 'productos'
+    // Consultar catálogo de productos para validar columna 'productos' y calcular el precio base automáticamente
     const productosExistentes = await prisma.producto.findMany({
-      select: { id: true, codigo: true, nombre: true },
+      select: { id: true, codigo: true, nombre: true, precioPss: true },
     });
-    const prodsByCodigo = new Map<string, string>();
-    const prodsByNombre = new Map<string, string>();
+    const prodsByCodigo = new Map<string, { id: string; precioPss: number }>();
+    const prodsByNombre = new Map<string, { id: string; precioPss: number }>();
     for (const prod of productosExistentes) {
-      if (prod.codigo) prodsByCodigo.set(prod.codigo.trim().toUpperCase(), prod.id);
-      if (prod.nombre) prodsByNombre.set(prod.nombre.trim().toUpperCase(), prod.id);
+      const pss = Number(prod.precioPss) || 0;
+      if (prod.codigo) prodsByCodigo.set(prod.codigo.trim().toUpperCase(), { id: prod.id, precioPss: pss });
+      if (prod.nombre) prodsByNombre.set(prod.nombre.trim().toUpperCase(), { id: prod.id, precioPss: pss });
     }
 
     const filasValidadas: FilaPackValidada[] = [];
@@ -419,7 +420,7 @@ export async function previsualizarCargaMasivaPacksAction(
 
       const rawNormalized: Record<string, any> = {};
       for (const [key, value] of Object.entries(raw)) {
-        rawNormalized[key.toLowerCase().trim().replace(/[\s_-]+/g, '')] = value;
+        rawNormalized[key.toLowerCase().trim().replace(/[\s_%-]+/g, '')] = value;
       }
 
       // Código (SKU)
@@ -461,7 +462,7 @@ export async function previsualizarCargaMasivaPacksAction(
         errores.push('El campo "descripcion" es obligatorio.');
       }
 
-      // Productos componentes
+      // Productos componentes y cálculo automático del precio base
       const productosRaw = String(
         rawNormalized['productos'] ??
           rawNormalized['items'] ??
@@ -471,63 +472,85 @@ export async function previsualizarCargaMasivaPacksAction(
           ''
       ).trim();
 
+      let precioBaseCalculado = 0;
       let itemsValidadosCount = 0;
-      if (productosRaw) {
+
+      if (!productosRaw) {
+        errores.push('El pack debe incluir al menos un producto en la columna "productos" para calcular automáticamente el precio base.');
+      } else {
         const parsedItems = parsearProductosPack(productosRaw);
-        for (const item of parsedItems) {
-          const key = item.identificador.toUpperCase();
-          const prodId = prodsByCodigo.get(key) || prodsByNombre.get(key);
-          if (!prodId) {
-            // No bloqueante pero informativo si no se encuentra exacto
-            // Verificamos si existe por coincidencia parcial
-            const matchParcial = productosExistentes.find(
-              (p) =>
-                p.nombre.toLowerCase().includes(item.identificador.toLowerCase()) ||
-                (p.codigo && p.codigo.toLowerCase().includes(item.identificador.toLowerCase()))
-            );
-            if (!matchParcial) {
-              errores.push(
-                `Producto no encontrado en catálogo: "${item.identificador}". Verificá el SKU o Nombre exacto.`
+        if (parsedItems.length === 0) {
+          errores.push('No se pudieron interpretar los productos del pack. Usá el formato: SKU:Cantidad | SKU:Cantidad (ej: SH-ARGAN-1000:2 | MAS-NUTRI-1000:1).');
+        } else {
+          for (const item of parsedItems) {
+            const key = item.identificador.toUpperCase();
+            let prodInfo = prodsByCodigo.get(key) || prodsByNombre.get(key);
+            if (!prodInfo) {
+              // Búsqueda por coincidencia parcial si no se encontró exacto
+              const matchParcial = productosExistentes.find(
+                (p) =>
+                  p.nombre.toLowerCase().includes(item.identificador.toLowerCase()) ||
+                  (p.codigo && p.codigo.toLowerCase().includes(item.identificador.toLowerCase()))
               );
-            } else {
-              itemsValidadosCount++;
+              if (matchParcial) {
+                prodInfo = { id: matchParcial.id, precioPss: Number(matchParcial.precioPss) || 0 };
+              }
             }
-          } else {
-            itemsValidadosCount++;
+
+            if (prodInfo) {
+              itemsValidadosCount++;
+              precioBaseCalculado += prodInfo.precioPss * item.cantidad;
+            } else {
+              errores.push(
+                `Producto no encontrado en catálogo: "${item.identificador}". Verificá el SKU o Nombre exacto para calcular su precio base.`
+              );
+            }
           }
         }
       }
 
-      // Precios
-      const precioOriginalNum = Number(
-        rawNormalized['preciooriginal'] ??
-          rawNormalized['preciolista'] ??
-          rawNormalized['precioreferencia'] ??
-          0
-      );
-      if (isNaN(precioOriginalNum) || precioOriginalNum <= 0) {
-        errores.push('El campo "precioOriginal" (precio de lista tachado) debe ser un número mayor a 0.');
+      if (precioBaseCalculado <= 0 && errores.length === 0) {
+        errores.push('El precio base calculado a partir de los productos incluidos debe ser mayor a $0.');
       }
 
-      const precioDistNum = Number(
-        rawNormalized['preciodistribuidor'] ??
-          rawNormalized['preciocdistribuidor'] ??
-          rawNormalized['preciocondistribuidor'] ??
-          0
-      );
-      if (isNaN(precioDistNum) || precioDistNum <= 0) {
-        errores.push('El campo "precioDistribuidor" (precio con distribuidor activo) debe ser mayor a 0.');
+      // Porcentajes de Descuento (uno por columna)
+      // 1. Clientes con distribuidor asignado
+      const descDistVal =
+        rawNormalized['descuentocondistribuidor'] ??
+        rawNormalized['descuentodistribuidor'] ??
+        rawNormalized['porcentajecondistribuidor'] ??
+        rawNormalized['porcentajedistribuidor'] ??
+        rawNormalized['condistribuidor'] ??
+        rawNormalized['distribuidor'] ??
+        rawNormalized['descuentocon'] ??
+        '';
+
+      // 2. Clientes sin distribuidor asignado (venta directa fábrica)
+      const descDirectoVal =
+        rawNormalized['descuentosindistribuidor'] ??
+        rawNormalized['descuentodirecto'] ??
+        rawNormalized['porcentajesindistribuidor'] ??
+        rawNormalized['porcentajedirecto'] ??
+        rawNormalized['sindistribuidor'] ??
+        rawNormalized['directo'] ??
+        rawNormalized['descuentosin'] ??
+        '';
+
+      const descDistNum = descDistVal !== '' ? Number(descDistVal) : 0;
+      const descDirectoNum = descDirectoVal !== '' ? Number(descDirectoVal) : 0;
+
+      if (isNaN(descDistNum) || descDistNum < 0 || descDistNum > 100) {
+        errores.push('El porcentaje en "descuentoConDistribuidor" debe ser un número entre 0 y 100 (ej: 25 para 25% OFF).');
+      }
+      if (isNaN(descDirectoNum) || descDirectoNum < 0 || descDirectoNum > 100) {
+        errores.push('El porcentaje en "descuentoSinDistribuidor" debe ser un número entre 0 y 100 (ej: 15 para 15% OFF).');
       }
 
-      const precioDirNum = Number(
-        rawNormalized['preciodirecto'] ??
-          rawNormalized['preciosindistribuidor'] ??
-          rawNormalized['preciosdistribuidor'] ??
-          0
-      );
-      if (isNaN(precioDirNum) || precioDirNum <= 0) {
-        errores.push('El campo "precioDirecto" (precio sin distribuidor / venta directa) debe ser mayor a 0.');
-      }
+      const precioBase = Math.round(precioBaseCalculado);
+      const factorDist = 1 - (isNaN(descDistNum) ? 0 : descDistNum) / 100;
+      const factorDirecto = 1 - (isNaN(descDirectoNum) ? 0 : descDirectoNum) / 100;
+      const precioDistribuidorCalculado = Math.round(precioBase * factorDist);
+      const precioDirectoCalculado = Math.round(precioBase * factorDirecto);
 
       // Flags
       const activo = parsearBooleano(rawNormalized['activo'], true);
@@ -573,9 +596,11 @@ export async function previsualizarCargaMasivaPacksAction(
           etiqueta,
           descripcion,
           productos: productosRaw,
-          precioOriginal: isNaN(precioOriginalNum) ? 0 : precioOriginalNum,
-          precioDistribuidor: isNaN(precioDistNum) ? 0 : precioDistNum,
-          precioDirecto: isNaN(precioDirNum) ? 0 : precioDirNum,
+          descuentoConDistribuidor: isNaN(descDistNum) ? 0 : descDistNum,
+          descuentoSinDistribuidor: isNaN(descDirectoNum) ? 0 : descDirectoNum,
+          precioBaseCalculado: precioBase,
+          precioDistribuidorCalculado,
+          precioDirectoCalculado,
           activo,
           destacado,
           ordenVisualizacion,
@@ -658,15 +683,16 @@ export async function confirmarCargaMasivaPacksAction(
       };
     }
 
-    // Traer todos los productos para resolver componentes
+    // Traer todos los productos para resolver componentes y calcular precio base
     const productosExistentes = await prisma.producto.findMany({
-      select: { id: true, codigo: true, nombre: true },
+      select: { id: true, codigo: true, nombre: true, precioPss: true },
     });
-    const prodsByCodigo = new Map<string, string>();
-    const prodsByNombre = new Map<string, string>();
+    const prodsByCodigo = new Map<string, { id: string; precioPss: number }>();
+    const prodsByNombre = new Map<string, { id: string; precioPss: number }>();
     for (const prod of productosExistentes) {
-      if (prod.codigo) prodsByCodigo.set(prod.codigo.trim().toUpperCase(), prod.id);
-      if (prod.nombre) prodsByNombre.set(prod.nombre.trim().toUpperCase(), prod.id);
+      const pss = Number(prod.precioPss) || 0;
+      if (prod.codigo) prodsByCodigo.set(prod.codigo.trim().toUpperCase(), { id: prod.id, precioPss: pss });
+      if (prod.nombre) prodsByNombre.set(prod.nombre.trim().toUpperCase(), { id: prod.id, precioPss: pss });
     }
 
     let creados = 0;
@@ -683,19 +709,55 @@ export async function confirmarCargaMasivaPacksAction(
       const nombre = datos.nombre?.trim();
       const descripcion = datos.descripcion?.trim();
       const productosRaw = datos.productos?.trim() || '';
-      const precioOriginal = Number(datos.precioOriginal);
-      const precioDistribuidor = Number(datos.precioDistribuidor);
-      const precioDirecto = Number(datos.precioDirecto);
 
-      if (!nombre || !descripcion || isNaN(precioDistribuidor) || precioDistribuidor <= 0) {
+      const descuentoConDistribuidor = Number(datos.descuentoConDistribuidor ?? 0);
+      const descuentoSinDistribuidor = Number(datos.descuentoSinDistribuidor ?? 0);
+
+      // Calcular o verificar precio base a partir de los productos incluidos
+      let precioBase = Number(datos.precioBaseCalculado ?? 0);
+      const parsedItems = productosRaw ? parsearProductosPack(productosRaw) : [];
+
+      if ((isNaN(precioBase) || precioBase <= 0) && parsedItems.length > 0) {
+        let suma = 0;
+        for (const it of parsedItems) {
+          const key = it.identificador.toUpperCase();
+          let prodInfo = prodsByCodigo.get(key) || prodsByNombre.get(key);
+          if (!prodInfo) {
+            const match = productosExistentes.find(
+              (p) =>
+                p.nombre.toLowerCase().includes(it.identificador.toLowerCase()) ||
+                (p.codigo && p.codigo.toLowerCase().includes(it.identificador.toLowerCase()))
+            );
+            if (match) {
+              prodInfo = { id: match.id, precioPss: Number(match.precioPss) || 0 };
+            }
+          }
+          if (prodInfo) {
+            suma += prodInfo.precioPss * it.cantidad;
+          }
+        }
+        if (suma > 0) {
+          precioBase = Math.round(suma);
+        }
+      }
+
+      if (!nombre || !descripcion || isNaN(precioBase) || precioBase <= 0) {
         omitidos++;
         advertencias.push({
           fila: numeroFila,
           codigo: codigo || 'N/A',
-          mensaje: 'Fila omitida por datos incompletos o precios inválidos.',
+          mensaje: 'Fila omitida por datos incompletos o precio base no calculable ($0). Debe contener productos válidos.',
         });
         continue;
       }
+
+      // Cálculo de precios finales según los porcentajes de descuento por columna
+      const factorDist = 1 - (isNaN(descuentoConDistribuidor) ? 0 : descuentoConDistribuidor) / 100;
+      const factorDirecto = 1 - (isNaN(descuentoSinDistribuidor) ? 0 : descuentoSinDistribuidor) / 100;
+      const precioDistribuidor = Math.round(precioBase * factorDist);
+      const precioDirecto = Math.round(precioBase * factorDirecto);
+      const precioPromocional = precioDirecto > 0 ? precioDirecto : (precioDistribuidor > 0 ? precioDistribuidor : precioBase);
+      const maxDescuento = Math.max(descuentoConDistribuidor, descuentoSinDistribuidor);
 
       // Buscar pack existente por código o por nombre
       let existente: any = null;
@@ -750,9 +812,6 @@ export async function confirmarCargaMasivaPacksAction(
         ? Math.max(0, Number(datos.ordenVisualizacion))
         : 0;
 
-      // El precio promocional de referencia será el precio directo
-      const precioPromocional = precioDirecto > 0 ? precioDirecto : precioDistribuidor;
-
       let packId = '';
 
       if (existente) {
@@ -764,10 +823,14 @@ export async function confirmarCargaMasivaPacksAction(
             nombre,
             etiqueta,
             descripcion,
-            precioOriginal: !isNaN(precioOriginal) && precioOriginal > 0 ? new Prisma.Decimal(precioOriginal) : null,
+            precioOriginal: new Prisma.Decimal(precioBase),
+            precioPssEquivalente: new Prisma.Decimal(precioBase),
             precioDistribuidor: new Prisma.Decimal(precioDistribuidor),
             precioDirecto: new Prisma.Decimal(precioDirecto),
             precioPromocional: new Prisma.Decimal(precioPromocional),
+            descuento: new Prisma.Decimal(maxDescuento),
+            descuentoDistribuidor: new Prisma.Decimal(descuentoConDistribuidor),
+            descuentoDirecto: new Prisma.Decimal(descuentoSinDistribuidor),
             activo,
             destacado,
             ordenVisualizacion,
@@ -786,10 +849,14 @@ export async function confirmarCargaMasivaPacksAction(
             nombre,
             etiqueta,
             descripcion,
-            precioOriginal: !isNaN(precioOriginal) && precioOriginal > 0 ? new Prisma.Decimal(precioOriginal) : null,
+            precioOriginal: new Prisma.Decimal(precioBase),
+            precioPssEquivalente: new Prisma.Decimal(precioBase),
             precioDistribuidor: new Prisma.Decimal(precioDistribuidor),
             precioDirecto: new Prisma.Decimal(precioDirecto),
             precioPromocional: new Prisma.Decimal(precioPromocional),
+            descuento: new Prisma.Decimal(maxDescuento),
+            descuentoDistribuidor: new Prisma.Decimal(descuentoConDistribuidor),
+            descuentoDirecto: new Prisma.Decimal(descuentoSinDistribuidor),
             imagen: imagenParaCrear,
             activo,
             destacado,
@@ -800,50 +867,47 @@ export async function confirmarCargaMasivaPacksAction(
         creados++;
       }
 
-      // Procesar productos / componentes si la columna 'productos' vino informada
-      if (productosRaw && packId) {
-        const parsedItems = parsearProductosPack(productosRaw);
-        if (parsedItems.length > 0) {
-          // Eliminar PackItems existentes para refrescar con la lista del Excel
-          await prisma.packItem.deleteMany({
-            where: { packId },
-          });
+      // Procesar productos / componentes del pack
+      if (parsedItems.length > 0 && packId) {
+        // Eliminar PackItems existentes para refrescar con la lista del Excel
+        await prisma.packItem.deleteMany({
+          where: { packId },
+        });
 
-          for (const item of parsedItems) {
-            const key = item.identificador.toUpperCase();
-            let prodId = prodsByCodigo.get(key) || prodsByNombre.get(key);
+        for (const item of parsedItems) {
+          const key = item.identificador.toUpperCase();
+          let prodInfo = prodsByCodigo.get(key) || prodsByNombre.get(key);
 
-            // Búsqueda por coincidencia parcial si no se encontró exacto
-            if (!prodId) {
-              const match = productosExistentes.find(
-                (p) =>
-                  p.nombre.toLowerCase().includes(item.identificador.toLowerCase()) ||
-                  (p.codigo && p.codigo.toLowerCase().includes(item.identificador.toLowerCase()))
-              );
-              if (match) {
-                prodId = match.id;
-              }
+          // Búsqueda por coincidencia parcial si no se encontró exacto
+          if (!prodInfo) {
+            const match = productosExistentes.find(
+              (p) =>
+                p.nombre.toLowerCase().includes(item.identificador.toLowerCase()) ||
+                (p.codigo && p.codigo.toLowerCase().includes(item.identificador.toLowerCase()))
+            );
+            if (match) {
+              prodInfo = { id: match.id, precioPss: Number(match.precioPss) || 0 };
             }
+          }
 
-            if (prodId) {
-              try {
-                await prisma.packItem.create({
-                  data: {
-                    packId,
-                    productoId: prodId,
-                    cantidad: item.cantidad,
-                  },
-                });
-              } catch (itemErr: any) {
-                console.error(`Error al asociar item al pack ${packId}:`, itemErr);
-              }
-            } else {
-              advertencias.push({
-                fila: numeroFila,
-                codigo: codigo || nombre,
-                mensaje: `No se pudo encontrar en el catálogo el producto "${item.identificador}" para asociarlo al pack.`,
+          if (prodInfo) {
+            try {
+              await prisma.packItem.create({
+                data: {
+                  packId,
+                  productoId: prodInfo.id,
+                  cantidad: item.cantidad,
+                },
               });
+            } catch (itemErr: any) {
+              console.error(`Error al asociar item al pack ${packId}:`, itemErr);
             }
+          } else {
+            advertencias.push({
+              fila: numeroFila,
+              codigo: codigo || nombre,
+              mensaje: `No se pudo encontrar en el catálogo el producto "${item.identificador}" para asociarlo al pack.`,
+            });
           }
         }
       }

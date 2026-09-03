@@ -149,6 +149,11 @@ export default async function PerfilPage() {
       })
     : [];
 
+  const tieneDistribuidor = Boolean(
+    cliente?.zona?.distribuidorId || cliente?.zona?.estado === 'CON_DISTRIBUIDOR'
+  );
+  const esSinDistribuidor = Boolean(!tieneDistribuidor);
+
   return (
     <div id="perfil-root" className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col justify-between p-4 md:p-8">
       {/* Header */}
@@ -161,6 +166,7 @@ export default async function PerfilPage() {
         mostrarInicio={true}
         mostrarCatalogo={true}
         mostrarCarrito={true}
+        sinDistribuidorAsignado={esSinDistribuidor}
       />
 
       {/* Main Content */}

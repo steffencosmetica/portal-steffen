@@ -22,9 +22,9 @@ let reglasSincronizadas = false;
  * Asegura que existan las reglas de descuento base en caso de que la tabla esté vacía
  * o actualiza las existentes a las nuevas condiciones oficiales:
  * - Primer Pedido: 20% OFF
- * - Reposición 0 a 30 días: 15% OFF
- * - Reposición 31 a 45 días: 10% OFF
- * - > 45 días: Sin beneficio (0%)
+ * - Reposición 0 a 40 días: 25% OFF
+ * - Reposición 41 a 55 días: 15% OFF (15 días posteriores)
+ * - > 55 días: Sin beneficio (0%)
  */
 export async function inicializarReglasSiEstanVacias() {
   if (reglasSincronizadas) return;
@@ -44,16 +44,16 @@ export async function inicializarReglasSiEstanVacias() {
           {
             tipo: TipoDescuento.REPOSICION,
             diasDesde: 0,
-            diasHasta: 30,
-            porcentaje: 15,
+            diasHasta: 40,
+            porcentaje: 25,
             activa: true,
             orden: 2,
           },
           {
             tipo: TipoDescuento.REPOSICION,
-            diasDesde: 31,
-            diasHasta: 45,
-            porcentaje: 10,
+            diasDesde: 41,
+            diasHasta: 55,
+            porcentaje: 15,
             activa: true,
             orden: 3,
           },
@@ -61,39 +61,88 @@ export async function inicializarReglasSiEstanVacias() {
       });
       console.log('Reglas de descuento iniciales creadas en base de datos.');
     } else {
-      // Sincronizar condiciones oficiales solo una vez en el ciclo del servidor
+      // Sincronizar condiciones oficiales:
+      // 1. Primer Pedido -> 20%
       await prisma.reglaDeDescuento.updateMany({
         where: {
           tipo: TipoDescuento.PRIMER_PEDIDO,
-          porcentaje: 15,
+          porcentaje: { not: 20 },
         },
         data: {
           porcentaje: 20,
         },
       });
 
-      await prisma.reglaDeDescuento.updateMany({
+      // 2. Reposición Tramo 1: 0 a 40 días -> 25% OFF
+      const reglasRepo0 = await prisma.reglaDeDescuento.findFirst({
         where: {
           tipo: TipoDescuento.REPOSICION,
           diasDesde: 0,
-          diasHasta: 60,
-        },
-        data: {
-          diasHasta: 30,
-          porcentaje: 15,
         },
       });
 
+      if (reglasRepo0) {
+        await prisma.reglaDeDescuento.update({
+          where: { id: reglasRepo0.id },
+          data: {
+            diasDesde: 0,
+            diasHasta: 40,
+            porcentaje: 25,
+            activa: true,
+          },
+        });
+      } else {
+        await prisma.reglaDeDescuento.create({
+          data: {
+            tipo: TipoDescuento.REPOSICION,
+            diasDesde: 0,
+            diasHasta: 40,
+            porcentaje: 25,
+            activa: true,
+            orden: 2,
+          },
+        });
+      }
+
+      // 3. Reposición Tramo 2: 41 a 55 días (15 días posteriores) -> 15% OFF
+      const reglasRepoPosterior = await prisma.reglaDeDescuento.findFirst({
+        where: {
+          tipo: TipoDescuento.REPOSICION,
+          diasDesde: { gt: 0 },
+        },
+      });
+
+      if (reglasRepoPosterior) {
+        await prisma.reglaDeDescuento.update({
+          where: { id: reglasRepoPosterior.id },
+          data: {
+            diasDesde: 41,
+            diasHasta: 55,
+            porcentaje: 15,
+            activa: true,
+          },
+        });
+      } else {
+        await prisma.reglaDeDescuento.create({
+          data: {
+            tipo: TipoDescuento.REPOSICION,
+            diasDesde: 41,
+            diasHasta: 55,
+            porcentaje: 15,
+            activa: true,
+            orden: 3,
+          },
+        });
+      }
+
+      // Desactivar cualquier regla de reposición redundante con diasDesde > 55
       await prisma.reglaDeDescuento.updateMany({
         where: {
           tipo: TipoDescuento.REPOSICION,
-          diasDesde: 61,
-          diasHasta: 90,
+          diasDesde: { gt: 41 },
         },
         data: {
-          diasDesde: 31,
-          diasHasta: 45,
-          porcentaje: 10,
+          activa: false,
         },
       });
     }

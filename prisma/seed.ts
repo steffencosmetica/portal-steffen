@@ -11,9 +11,9 @@ async function main() {
   // 1. Reglas de Descuento iniciales (configuración en base de datos, editable desde /admin)
   // Requerimientos:
   // - Primer pedido: 20% OFF (sin importar zona)
-  // - Reposición 0–30 días desde última compra completada: 15% OFF
-  // - Reposición 31–45 días desde última compra completada: 10% OFF
-  // - > 45 días: Sin beneficio (0%)
+  // - Reposición 0–40 días desde última compra completada: 25% OFF
+  // - Reposición 41–55 días desde última compra completada: 15% OFF
+  // - > 55 días: Sin beneficio (0%)
   console.log('Creando reglas de descuento...');
   
   await prisma.reglaDeDescuento.createMany({
@@ -27,16 +27,16 @@ async function main() {
       {
         tipo: 'REPOSICION',
         diasDesde: 0,
-        diasHasta: 30,
-        porcentaje: 15.0,
+        diasHasta: 40,
+        porcentaje: 25.0,
         activa: true,
         orden: 2,
       },
       {
         tipo: 'REPOSICION',
-        diasDesde: 31,
-        diasHasta: 45,
-        porcentaje: 10.0,
+        diasDesde: 41,
+        diasHasta: 55,
+        porcentaje: 15.0,
         activa: true,
         orden: 3,
       },

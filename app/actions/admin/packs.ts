@@ -19,7 +19,9 @@ export interface GuardarPackData {
   precioOriginal?: number | null;
   precioDistribuidor?: number | null;
   precioDirecto?: number | null;
-  precioPromocional: number;
+  descuentoDistribuidor?: number | null;
+  descuentoDirecto?: number | null;
+  precioPromocional?: number;
   activo?: boolean;
   destacado?: boolean;
   ordenVisualizacion?: number;
@@ -89,21 +91,25 @@ export async function guardarPackAction(
       return { success: false, error: 'La URL o ruta de la imagen del pack es obligatoria.' };
     }
 
-    const precioPromocional = Number(data.precioPromocional);
-    if (isNaN(precioPromocional) || precioPromocional <= 0) {
-      return { success: false, error: 'El precio promocional debe ser un número mayor a cero.' };
-    }
-
     const codigo = data.codigo?.trim() || null;
-    const precioOriginal =
+    const descuentoDistribuidor =
+      data.descuentoDistribuidor !== undefined && data.descuentoDistribuidor !== null && !isNaN(Number(data.descuentoDistribuidor))
+        ? Number(data.descuentoDistribuidor)
+        : null;
+    const descuentoDirecto =
+      data.descuentoDirecto !== undefined && data.descuentoDirecto !== null && !isNaN(Number(data.descuentoDirecto))
+        ? Number(data.descuentoDirecto)
+        : null;
+
+    let precioOriginal =
       data.precioOriginal !== undefined && data.precioOriginal !== null && !isNaN(Number(data.precioOriginal))
         ? Number(data.precioOriginal)
         : null;
-    const precioDistribuidor =
+    let precioDistribuidor =
       data.precioDistribuidor !== undefined && data.precioDistribuidor !== null && !isNaN(Number(data.precioDistribuidor))
         ? Number(data.precioDistribuidor)
         : null;
-    const precioDirecto =
+    let precioDirecto =
       data.precioDirecto !== undefined && data.precioDirecto !== null && !isNaN(Number(data.precioDirecto))
         ? Number(data.precioDirecto)
         : null;
@@ -165,8 +171,33 @@ export async function guardarPackAction(
       }
     }
 
-    let porcentajeDescuentoCalculado: number | null = null;
+    // Si tenemos items y suma de productos, el precio base de lista es esa suma si no se definió otro
+    if (sumaPssEquivalente > 0 && (!precioOriginal || precioOriginal <= 0)) {
+      precioOriginal = sumaPssEquivalente;
+    }
+
     const baseParaDescuento = precioOriginal || sumaPssEquivalente;
+
+    // Calcular precios a partir de porcentajes si fueron informados
+    if (baseParaDescuento > 0) {
+      if (descuentoDistribuidor !== null && (precioDistribuidor === null || precioDistribuidor <= 0)) {
+        precioDistribuidor = Math.round(baseParaDescuento * (1 - descuentoDistribuidor / 100));
+      }
+      if (descuentoDirecto !== null && (precioDirecto === null || precioDirecto <= 0)) {
+        precioDirecto = Math.round(baseParaDescuento * (1 - descuentoDirecto / 100));
+      }
+    }
+
+    let precioPromocional = Number(data.precioPromocional);
+    if (isNaN(precioPromocional) || precioPromocional <= 0) {
+      precioPromocional = precioDirecto || precioDistribuidor || baseParaDescuento || 0;
+    }
+
+    if (precioPromocional <= 0) {
+      return { success: false, error: 'El precio del pack debe ser mayor a cero. Asegurate de incluir productos o definir el descuento.' };
+    }
+
+    let porcentajeDescuentoCalculado: number | null = null;
     if (baseParaDescuento > 0 && precioPromocional < baseParaDescuento) {
       porcentajeDescuentoCalculado = Number((((baseParaDescuento - precioPromocional) / baseParaDescuento) * 100).toFixed(2));
     }
@@ -192,6 +223,8 @@ export async function guardarPackAction(
             precioPromocional: new Prisma.Decimal(precioPromocional),
             precioPssEquivalente: sumaPssEquivalente > 0 ? new Prisma.Decimal(sumaPssEquivalente) : null,
             descuento: porcentajeDescuentoCalculado !== null ? new Prisma.Decimal(porcentajeDescuentoCalculado) : null,
+            descuentoDistribuidor: descuentoDistribuidor !== null ? new Prisma.Decimal(descuentoDistribuidor) : null,
+            descuentoDirecto: descuentoDirecto !== null ? new Prisma.Decimal(descuentoDirecto) : null,
             fechaInicio,
             fechaFin,
             activo,
@@ -231,6 +264,8 @@ export async function guardarPackAction(
             precioPromocional: new Prisma.Decimal(precioPromocional),
             precioPssEquivalente: sumaPssEquivalente > 0 ? new Prisma.Decimal(sumaPssEquivalente) : null,
             descuento: porcentajeDescuentoCalculado !== null ? new Prisma.Decimal(porcentajeDescuentoCalculado) : null,
+            descuentoDistribuidor: descuentoDistribuidor !== null ? new Prisma.Decimal(descuentoDistribuidor) : null,
+            descuentoDirecto: descuentoDirecto !== null ? new Prisma.Decimal(descuentoDirecto) : null,
             fechaInicio,
             fechaFin,
             activo,

@@ -38,7 +38,12 @@ interface PackFormProps {
     descripcion: string;
     imagen: string;
     etiqueta?: string | null;
-    precioPromocional: number;
+    precioPromocional?: number;
+    descuentoDistribuidor?: number | null;
+    descuentoDirecto?: number | null;
+    precioOriginal?: number | null;
+    precioDistribuidor?: number | null;
+    precioDirecto?: number | null;
     activo: boolean;
     destacado: boolean;
     fechaInicio?: string | null;
@@ -61,9 +66,18 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
   const [imagen, setImagen] = useState(
     packInicial?.imagen || 'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80'
   );
-  const [precioPromocional, setPrecioPromocional] = useState<string>(
-    packInicial?.precioPromocional ? String(packInicial.precioPromocional) : ''
+
+  const [descuentoDistribuidor, setDescuentoDistribuidor] = useState<string>(
+    packInicial?.descuentoDistribuidor !== undefined && packInicial?.descuentoDistribuidor !== null
+      ? String(packInicial.descuentoDistribuidor)
+      : ''
   );
+  const [descuentoDirecto, setDescuentoDirecto] = useState<string>(
+    packInicial?.descuentoDirecto !== undefined && packInicial?.descuentoDirecto !== null
+      ? String(packInicial.descuentoDirecto)
+      : ''
+  );
+
   const [activo, setActivo] = useState<boolean>(packInicial?.activo ?? true);
   const [destacado, setDestacado] = useState<boolean>(packInicial?.destacado ?? false);
 
@@ -89,7 +103,7 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
     return new Map(productosDisponibles.map((p) => [p.id, p]));
   }, [productosDisponibles]);
 
-  // Cálculos dinámicos de referencia
+  // Cálculos dinámicos automáticos del precio base según productos
   const sumaPssEquivalente = useMemo(() => {
     return items.reduce((acc, curr) => {
       const prod = productosMap.get(curr.productoId);
@@ -97,12 +111,21 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
     }, 0);
   }, [items, productosMap]);
 
-  const precioPromoNum = Number(precioPromocional) || 0;
-  const ahorroCalculado = sumaPssEquivalente > 0 && precioPromoNum > 0 ? sumaPssEquivalente - precioPromoNum : 0;
-  const porcentajeDescuento =
-    sumaPssEquivalente > 0 && precioPromoNum > 0 && precioPromoNum < sumaPssEquivalente
-      ? Math.round(((sumaPssEquivalente - precioPromoNum) / sumaPssEquivalente) * 100)
-      : 0;
+  const descDistNum = Math.min(100, Math.max(0, Number(descuentoDistribuidor) || 0));
+  const descDirectoNum = Math.min(100, Math.max(0, Number(descuentoDirecto) || 0));
+
+  const precioConDistribuidorCalculado = useMemo(() => {
+    if (sumaPssEquivalente <= 0) return 0;
+    return Math.round(sumaPssEquivalente * (1 - descDistNum / 100));
+  }, [sumaPssEquivalente, descDistNum]);
+
+  const precioSinDistribuidorCalculado = useMemo(() => {
+    if (sumaPssEquivalente <= 0) return 0;
+    return Math.round(sumaPssEquivalente * (1 - descDirectoNum / 100));
+  }, [sumaPssEquivalente, descDirectoNum]);
+
+  const ahorroDist = sumaPssEquivalente > 0 && descDistNum > 0 ? sumaPssEquivalente - precioConDistribuidorCalculado : 0;
+  const ahorroDirecto = sumaPssEquivalente > 0 && descDirectoNum > 0 ? sumaPssEquivalente - precioSinDistribuidorCalculado : 0;
 
   const formatoMoneda = new Intl.NumberFormat('es-AR', {
     style: 'currency',
@@ -167,12 +190,16 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
       setErrorMensaje('La URL de imagen es obligatoria.');
       return;
     }
-    if (!precioPromocional || isNaN(Number(precioPromocional)) || Number(precioPromocional) <= 0) {
-      setErrorMensaje('Ingresá un precio promocional válido mayor a cero.');
+    if (items.length === 0) {
+      setErrorMensaje('Debes incluir al menos un producto en el combo para calcular su precio base.');
       return;
     }
-    if (items.length === 0) {
-      setErrorMensaje('Debes incluir al menos un producto en el combo.');
+    if (Number(descuentoDistribuidor) < 0 || Number(descuentoDistribuidor) > 100) {
+      setErrorMensaje('El porcentaje de descuento con distribuidor debe estar entre 0% y 100%.');
+      return;
+    }
+    if (Number(descuentoDirecto) < 0 || Number(descuentoDirecto) > 100) {
+      setErrorMensaje('El porcentaje de descuento sin distribuidor debe estar entre 0% y 100%.');
       return;
     }
 
@@ -182,7 +209,12 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
         descripcion,
         imagen,
         etiqueta: etiqueta || null,
-        precioPromocional: Number(precioPromocional),
+        descuentoDistribuidor: Number(descuentoDistribuidor) || 0,
+        descuentoDirecto: Number(descuentoDirecto) || 0,
+        precioOriginal: sumaPssEquivalente,
+        precioDistribuidor: precioConDistribuidorCalculado,
+        precioDirecto: precioSinDistribuidorCalculado,
+        precioPromocional: precioSinDistribuidorCalculado > 0 ? precioSinDistribuidorCalculado : precioConDistribuidorCalculado,
         activo,
         destacado,
         fechaInicio: fechaInicio ? new Date(`${fechaInicio}T00:00:00`).toISOString() : null,
@@ -329,27 +361,99 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
               </div>
             </div>
 
-            {/* Precio Promocional Único */}
-            <div className="pt-2">
-              <label htmlFor="pack-precio" className="block text-xs font-bold text-neutral-700 uppercase tracking-wider mb-1.5">
-                Precio Promocional Profesional (ARS) *
-              </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400 text-sm font-bold">$</span>
-                <input
-                  id="pack-precio"
-                  type="number"
-                  step="0.01"
-                  min="1"
-                  required
-                  value={precioPromocional}
-                  onChange={(e) => setPrecioPromocional(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full bg-white border border-neutral-300 rounded-xl pl-8 pr-3.5 py-2.5 text-sm font-bold text-neutral-900 focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500"
-                />
+            {/* Sección de Precio Base Automático y Porcentajes de Descuento */}
+            <div className="pt-2 space-y-4">
+              {/* Cálculo Automático del Precio Base */}
+              <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200/80">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-amber-950 uppercase tracking-wider block">
+                      Precio Base del Pack (Calculado Automáticamente)
+                    </span>
+                    <span className="text-[11px] text-amber-800">
+                      Suma del precio Salón Profesional (PSS) de los productos incluidos en el pack.
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xl font-black text-amber-950">
+                      {formatoMoneda.format(sumaPssEquivalente)}
+                    </span>
+                    <span className="block text-[10px] text-amber-700 font-medium">
+                      {items.length} {items.length === 1 ? 'producto' : 'productos'}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <p className="text-[11px] text-neutral-500 mt-1">
-                Este es el precio final que abonará el profesional por el combo completo.
+
+              {/* Porcentajes de Descuento */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Descuento Clientes CON Distribuidor */}
+                <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2">
+                  <label htmlFor="pack-desc-dist" className="block text-xs font-bold text-emerald-950 uppercase tracking-wider">
+                    Descuento con Distribuidor Asignado (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="pack-desc-dist"
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="100"
+                      value={descuentoDistribuidor}
+                      onChange={(e) => setDescuentoDistribuidor(e.target.value)}
+                      placeholder="0"
+                      className="w-full bg-white border border-emerald-300 rounded-xl pr-8 pl-3.5 py-2.5 text-sm font-bold text-emerald-950 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-600 text-sm font-bold">%</span>
+                  </div>
+                  <div className="pt-1 flex items-center justify-between text-xs text-emerald-800">
+                    <span>Precio resultante:</span>
+                    <span className="font-bold font-mono text-sm text-emerald-950">
+                      {formatoMoneda.format(precioConDistribuidorCalculado)}
+                    </span>
+                  </div>
+                  {ahorroDist > 0 && (
+                    <div className="text-[11px] text-emerald-700 font-medium text-right">
+                      Ahorro para el salón: {formatoMoneda.format(ahorroDist)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Descuento Clientes SIN Distribuidor (Directo Fábrica) */}
+                <div className="p-4 rounded-xl bg-amber-50/50 border border-amber-200 space-y-2">
+                  <label htmlFor="pack-desc-directo" className="block text-xs font-bold text-amber-950 uppercase tracking-wider">
+                    Descuento sin Distribuidor / Venta Directa (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="pack-desc-directo"
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="100"
+                      value={descuentoDirecto}
+                      onChange={(e) => setDescuentoDirecto(e.target.value)}
+                      placeholder="0"
+                      className="w-full bg-white border border-amber-300 rounded-xl pr-8 pl-3.5 py-2.5 text-sm font-bold text-amber-950 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500"
+                    />
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-amber-600 text-sm font-bold">%</span>
+                  </div>
+                  <div className="pt-1 flex items-center justify-between text-xs text-amber-800">
+                    <span>Precio resultante:</span>
+                    <span className="font-bold font-mono text-sm text-amber-950">
+                      {formatoMoneda.format(precioSinDistribuidorCalculado)}
+                    </span>
+                  </div>
+                  {ahorroDirecto > 0 && (
+                    <div className="text-[11px] text-amber-700 font-medium text-right">
+                      Ahorro para el salón: {formatoMoneda.format(ahorroDirecto)}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-neutral-500 italic">
+                * No se ingresa ningún precio fijo manualmente: el sistema calcula automáticamente el precio base y aplica los porcentajes ingresados para cada tipo de cuenta.
               </p>
             </div>
           </div>
@@ -489,25 +593,37 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
               Análisis del Combo
             </h3>
 
-            <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between text-neutral-600">
-                <span>Suma Salón Profesional Individual:</span>
-                <span className="font-semibold text-neutral-900">{formatoMoneda.format(sumaPssEquivalente)}</span>
-              </div>
-              <div className="flex justify-between text-neutral-600">
-                <span>Precio Promocional:</span>
-                <span className="font-bold text-neutral-900">{formatoMoneda.format(precioPromoNum)}</span>
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between text-neutral-600 pb-2 border-b border-neutral-100">
+                <span>Precio Base (Suma PSS):</span>
+                <span className="font-bold text-neutral-900">{formatoMoneda.format(sumaPssEquivalente)}</span>
               </div>
 
-              {ahorroCalculado > 0 && (
-                <div className="pt-2 border-t border-neutral-100 flex justify-between items-center text-emerald-700 bg-emerald-50 p-2.5 rounded-xl font-bold">
-                  <div className="flex items-center gap-1">
-                    <Sparkles className="w-4 h-4 text-emerald-600" />
-                    <span>Ahorro ({porcentajeDescuento}%)</span>
-                  </div>
-                  <span>{formatoMoneda.format(ahorroCalculado)}</span>
+              {/* Precio Distribuidor */}
+              <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200/70 space-y-1">
+                <div className="flex justify-between items-center text-emerald-900 font-medium text-[11px]">
+                  <span>Con Distribuidor ({descDistNum}% OFF):</span>
+                  <span className="font-bold text-sm text-emerald-950">{formatoMoneda.format(precioConDistribuidorCalculado)}</span>
                 </div>
-              )}
+                {ahorroDist > 0 && (
+                  <div className="text-[10px] text-emerald-700 text-right">
+                    Ahorro salón: {formatoMoneda.format(ahorroDist)}
+                  </div>
+                )}
+              </div>
+
+              {/* Precio Venta Directa */}
+              <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/70 space-y-1">
+                <div className="flex justify-between items-center text-amber-900 font-medium text-[11px]">
+                  <span>Sin Distribuidor ({descDirectoNum}% OFF):</span>
+                  <span className="font-bold text-sm text-amber-950">{formatoMoneda.format(precioSinDistribuidorCalculado)}</span>
+                </div>
+                {ahorroDirecto > 0 && (
+                  <div className="text-[10px] text-amber-700 text-right">
+                    Ahorro salón: {formatoMoneda.format(ahorroDirecto)}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

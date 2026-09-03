@@ -608,22 +608,19 @@ export function CargaMasivaClient({ modoInicial = 'PRODUCTOS' }: CargaMasivaClie
                     <strong className="text-neutral-800">Código del Pack:</strong> Identificador único (ej: <code>PACK-SALON-01</code>). Permite crear o actualizar combos existentes.
                   </li>
                   <li>
-                    <strong className="text-neutral-800">Productos del Pack (Columna &quot;productos&quot;):</strong> Ingresás los productos separándolos con una barra vertical <code>|</code> y la cantidad con dos puntos <code>:</code> (ej: <code>SH-ARGAN-1000:2 | MAS-NUTRI-1000:1 | SER-ARGAN-250:1</code> o con el nombre exacto <code>Shampoo Nutrición 1000ml:2 | Sérum 250ml:1</code>). Si es 1 sola unidad, podés omitir el <code>:1</code>.
+                    <strong className="text-neutral-800">Productos del Pack (Columna &quot;productos&quot;):</strong> Ingresás los productos separándolos con una barra vertical <code>|</code> y la cantidad con dos puntos <code>:</code> (ej: <code>SH-ARGAN-1000:2 | MAS-NUTRI-1000:1 | SER-ARGAN-250:1</code> o con el nombre exacto <code>Shampoo Nutrición 1000ml:2 | Sérum 250ml:1</code>).
                   </li>
                   <li>
-                    <strong className="text-neutral-800">Precio Original:</strong> Precio de lista de referencia. Se mostrará <strong>tachado</strong> en el catálogo indicando el ahorro.
+                    <strong className="text-neutral-800">Cálculo Automático del Precio Base:</strong> Ya <strong>no necesitás cargar ningún precio</strong>. El sistema calcula automáticamente el precio base sumando el precio Salón Profesional (PSS) de todos los productos que contiene el pack.
                   </li>
                   <li>
-                    <strong className="text-neutral-800">Precio Distribuidor:</strong> Precio final fijo para cuentas de salón que tienen un distribuidor oficial activo asignado.
+                    <strong className="text-neutral-800">Descuento con Distribuidor (Columna &quot;descuentoConDistribuidor&quot;):</strong> Porcentaje de descuento aplicado al pack para clientes que tienen distribuidor asignado (ej: <code>25</code> para 25% OFF).
                   </li>
                   <li>
-                    <strong className="text-neutral-800">Precio Directo:</strong> Precio final fijo para cuentas sin distribuidor oficial (venta directa de fábrica).
+                    <strong className="text-neutral-800">Descuento sin Distribuidor (Columna &quot;descuentoSinDistribuidor&quot;):</strong> Porcentaje de descuento aplicado al pack para clientes sin distribuidor asignado / venta directa de fábrica (ej: <code>15</code> para 15% OFF).
                   </li>
                   <li>
                     <strong className="text-neutral-800">Exclusividad de Salón:</strong> Los packs solo se muestran y están disponibles para salones profesionales registrados y aprobados.
-                  </li>
-                  <li>
-                    <strong className="text-neutral-800">Sin Descuento de Reposición:</strong> Los packs respetan estos precios fijos exactos y no aplican descuento de reposición adicional.
                   </li>
                 </ul>
               )}
@@ -948,9 +945,9 @@ export function CargaMasivaClient({ modoInicial = 'PRODUCTOS' }: CargaMasivaClie
                       <th className="py-3 px-3.5 min-w-[200px]">Nombre del Pack / Combo</th>
                       <th className="py-3 px-3.5">Etiqueta</th>
                       <th className="py-3 px-3.5 min-w-[180px]">Productos Incluidos</th>
-                      <th className="py-3 px-3.5 text-right">Precio Original (Tachado)</th>
-                      <th className="py-3 px-3.5 text-right">Precio c/Distribuidor</th>
-                      <th className="py-3 px-3.5 text-right">Precio Directo</th>
+                      <th className="py-3 px-3.5 text-right">Precio Base (Suma PSS)</th>
+                      <th className="py-3 px-3.5 text-right">Desc. c/Distribuidor</th>
+                      <th className="py-3 px-3.5 text-right">Desc. s/Distribuidor</th>
                       <th className="py-3 px-3.5 text-center">Destacado</th>
                       <th className="py-3 px-3.5">Imagen</th>
                       <th className="py-3 px-3.5 min-w-[200px]">Estado / Errores</th>
@@ -1025,16 +1022,31 @@ export function CargaMasivaClient({ modoInicial = 'PRODUCTOS' }: CargaMasivaClie
                                 <span className="text-neutral-400 italic text-[11px]">Sin asignar</span>
                               )}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-mono text-neutral-500 line-through whitespace-nowrap">
-                              {fila.datos.precioOriginal > 0
-                                ? formatoMoneda.format(fila.datos.precioOriginal)
-                                : '—'}
+                            <td className="py-3 px-3.5 text-right font-mono font-semibold text-neutral-800 whitespace-nowrap">
+                              {fila.datos.precioBaseCalculado > 0 ? (
+                                <div>
+                                  <span>{formatoMoneda.format(fila.datos.precioBaseCalculado)}</span>
+                                  <div className="text-[10px] font-normal text-neutral-400">Total productos</div>
+                                </div>
+                              ) : (
+                                <span className="text-red-500 italic text-[11px]">$0</span>
+                              )}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-mono font-bold text-neutral-900 whitespace-nowrap">
-                              {formatoMoneda.format(fila.datos.precioDistribuidor)}
+                            <td className="py-3 px-3.5 text-right font-mono whitespace-nowrap">
+                              <div className="font-bold text-emerald-800">
+                                {formatoMoneda.format(fila.datos.precioDistribuidorCalculado)}
+                              </div>
+                              <div className="text-[10px] font-semibold text-emerald-600">
+                                {fila.datos.descuentoConDistribuidor}% OFF
+                              </div>
                             </td>
-                            <td className="py-3 px-3.5 text-right font-mono font-bold text-amber-700 whitespace-nowrap">
-                              {formatoMoneda.format(fila.datos.precioDirecto)}
+                            <td className="py-3 px-3.5 text-right font-mono whitespace-nowrap">
+                              <div className="font-bold text-amber-800">
+                                {formatoMoneda.format(fila.datos.precioDirectoCalculado)}
+                              </div>
+                              <div className="text-[10px] font-semibold text-amber-600">
+                                {fila.datos.descuentoSinDistribuidor}% OFF
+                              </div>
                             </td>
                             <td className="py-3 px-3.5 text-center whitespace-nowrap">
                               {fila.datos.destacado ? (

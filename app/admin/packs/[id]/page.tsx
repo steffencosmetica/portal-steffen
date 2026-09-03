@@ -71,6 +71,17 @@ export default async function AdminEditarPackPage({ params }: PageProps) {
         ? 'Rutinas de tratamiento'
         : pack.etiqueta || null,
     precioPromocional: Number(pack.precioPromocional),
+    descuentoDistribuidor:
+      pack.descuentoDistribuidor !== null && pack.descuentoDistribuidor !== undefined
+        ? Number(pack.descuentoDistribuidor)
+        : null,
+    descuentoDirecto:
+      pack.descuentoDirecto !== null && pack.descuentoDirecto !== undefined
+        ? Number(pack.descuentoDirecto)
+        : null,
+    precioOriginal: pack.precioOriginal ? Number(pack.precioOriginal) : null,
+    precioDistribuidor: pack.precioDistribuidor ? Number(pack.precioDistribuidor) : null,
+    precioDirecto: pack.precioDirecto ? Number(pack.precioDirecto) : null,
     activo: pack.activo,
     destacado: pack.destacado,
     fechaInicio: pack.fechaInicio ? pack.fechaInicio.toISOString() : null,

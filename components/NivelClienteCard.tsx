@@ -30,8 +30,8 @@ export function NivelClienteCard({
     esPrimerPedido && estadoCliente === 'PENDIENTE_APROBACION';
   const tieneDescuentoActivo =
     estadoNivel.porcentajeActual !== null && estadoNivel.porcentajeActual > 0;
+  const es25 = estadoNivel.porcentajeActual === 25;
   const es15 = estadoNivel.porcentajeActual === 15;
-  const es10 = estadoNivel.porcentajeActual === 10;
 
   return (
     <div
@@ -84,20 +84,20 @@ export function NivelClienteCard({
               </p>
             )}
 
-            {/* Barra de progreso de días si está en reposición (máximo 45 días) */}
+            {/* Barra de progreso de días si está en reposición (máximo 55 días) */}
             {estadoNivel.diasTranscurridos !== null && (
               <div className="pt-2 max-w-md">
                 <div className="flex items-center justify-between text-[11px] text-neutral-500 font-semibold mb-1">
                   <span>
-                    {estadoNivel.diasTranscurridos <= 45 
-                      ? `Día ${estadoNivel.diasTranscurridos} de 45` 
+                    {estadoNivel.diasTranscurridos <= 55 
+                      ? `Día ${estadoNivel.diasTranscurridos} de 55` 
                       : `Día ${estadoNivel.diasTranscurridos} (Beneficio finalizado)`}
                   </span>
                   <span>
-                    {es15 
-                      ? 'Tramo 15% (hasta día 30)' 
-                      : es10 
-                      ? 'Tramo 10% (días 31 a 45)' 
+                    {es25 
+                      ? 'Tramo 25% (hasta día 40)' 
+                      : es15 
+                      ? 'Tramo 15% (días 41 a 55)' 
                       : 'Beneficio expirado'}
                   </span>
                 </div>
@@ -105,14 +105,14 @@ export function NivelClienteCard({
                   <div
                     className="bg-amber-500 h-full transition-all"
                     style={{
-                      width: `${Math.min(100, (Math.min(estadoNivel.diasTranscurridos, 30) / 45) * 100)}%`,
+                      width: `${Math.min(100, (Math.min(estadoNivel.diasTranscurridos, 40) / 55) * 100)}%`,
                     }}
                   />
-                  {estadoNivel.diasTranscurridos > 30 && (
+                  {estadoNivel.diasTranscurridos > 40 && (
                     <div
                       className="bg-amber-400 h-full transition-all"
                       style={{
-                        width: `${Math.min(100, ((Math.min(estadoNivel.diasTranscurridos, 45) - 30) / 45) * 100)}%`,
+                        width: `${Math.min(100, ((Math.min(estadoNivel.diasTranscurridos, 55) - 40) / 55) * 100)}%`,
                       }}
                     />
                   )}

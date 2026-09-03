@@ -60,9 +60,9 @@ export function ReglasDescuentoClient({ reglasIniciales }: ReglasDescuentoClient
     orden: number;
   }>({
     tipo: TipoDescuento.REPOSICION,
-    porcentaje: 15,
+    porcentaje: 25,
     diasDesde: 0,
-    diasHasta: 30,
+    diasHasta: 40,
     activa: true,
     orden: 1,
   });
@@ -94,9 +94,9 @@ export function ReglasDescuentoClient({ reglasIniciales }: ReglasDescuentoClient
     setReglaEditando(null);
     setFormData({
       tipo: TipoDescuento.REPOSICION,
-      porcentaje: 15,
+      porcentaje: 25,
       diasDesde: 0,
-      diasHasta: 30,
+      diasHasta: 40,
       activa: true,
       orden: reglasIniciales.length + 1,
     });

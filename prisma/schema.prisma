@@ -238,6 +238,8 @@ model Pack {
 
   precioPssEquivalente  Decimal?    @db.Decimal(10, 2) // Opcional / calculado (suma de PSS individual)
   descuento             Decimal?    @db.Decimal(5, 2)  // Opcional / calculado (% descuento sobre suma PSS)
+  descuentoDistribuidor Decimal?    @db.Decimal(5, 2)  // % de descuento para clientes con distribuidor asignado
+  descuentoDirecto      Decimal?    @db.Decimal(5, 2)  // % de descuento para clientes sin distribuidor asignado
   fechaInicio           DateTime?
   fechaFin              DateTime?
   activo                Boolean     @default(true)

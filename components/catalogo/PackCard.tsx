@@ -251,7 +251,7 @@ export function PackCard({
               <div className="p-3 rounded-xl bg-amber-100/60 border border-amber-300/80 space-y-1.5">
                 <div className="flex items-center gap-1.5 text-xs font-bold text-amber-950">
                   <Lock className="w-4 h-4 text-amber-700 shrink-0" />
-                  <span>Precio de Combo Profesional:</span>
+                  <span>Precio Salón Profesional Directo de Fábrica:</span>
                   <span className="inline-block select-none filter blur-[5px] opacity-80 font-black text-amber-900 bg-amber-200/70 px-2 py-0.5 rounded tracking-wider pointer-events-none">
                     {formatoMoneda.format(pack.precioPromocional)}
                   </span>
@@ -266,7 +266,7 @@ export function PackCard({
               <div className="flex items-baseline justify-between gap-2">
                 <div>
                   <span className="text-[11px] uppercase tracking-wider text-amber-700 font-bold block">
-                    Precio Profesional Combo
+                    Precio Salón Profesional Directo de Fábrica
                   </span>
                   <span className="text-2xl font-black text-neutral-900">
                     {formatoMoneda.format(pack.precioPromocional)}

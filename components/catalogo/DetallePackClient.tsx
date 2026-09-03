@@ -344,7 +344,7 @@ export function DetallePackClient({
                   <div className="border-t border-neutral-200/80 pt-2 flex items-baseline justify-between">
                     <div>
                       <span className="block font-black text-neutral-900 text-sm">
-                        Total del Combo:
+                        Precio Salón Profesional Directo de Fábrica:
                       </span>
                       <span className="text-[10px] text-neutral-500 font-normal">
                         Tarifa profesional bonificada
@@ -458,9 +458,7 @@ export function DetallePackClient({
                 <div className="flex items-baseline justify-between gap-4">
                   <div>
                     <span className="block text-xs uppercase tracking-wider text-amber-800 font-bold">
-                      {tieneDistribuidor
-                        ? `Precio Salón con Distribuidor Oficial (${distribuidorNombre || 'Asignado'})`
-                        : 'Precio Salón Directo de Fábrica (Venta Directa)'}
+                      Precio Salón Profesional Directo de Fábrica
                     </span>
                     <div className="flex items-baseline gap-3 mt-1">
                       <span className="text-3xl font-black text-neutral-900 tracking-tight">

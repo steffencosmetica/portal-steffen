@@ -24,7 +24,9 @@ import {
   PackageCheck,
   Sparkles,
   Lock,
-  User
+  User,
+  Truck,
+  CheckCircle2
 } from 'lucide-react';
 
 interface CarritoClientProps {
@@ -32,12 +34,14 @@ interface CarritoClientProps {
   usuarioId?: string;
   usuarioLogueado?: boolean;
   estadoCliente?: string | null;
+  esSinDistribuidor?: boolean;
 }
 
 export function CarritoClient({
   usuarioId,
   usuarioLogueado = false,
   estadoCliente = null,
+  esSinDistribuidor = false,
 }: CarritoClientProps) {
   const router = useRouter();
   const { items, actualizarCantidad, quitarItem, vaciarCarrito, setUsuarioId, cargando: contextCargando } = useCart();
@@ -46,6 +50,7 @@ export function CarritoClient({
   const [subtotalProductos, setSubtotalProductos] = useState<number>(0);
   const [subtotalPacks, setSubtotalPacks] = useState<number>(0);
   const [tieneDistribuidor, setTieneDistribuidor] = useState<boolean>(false);
+  const [esSinDistribuidorState, setEsSinDistribuidorState] = useState<boolean>(esSinDistribuidor);
   const [nombreDistribuidor, setNombreDistribuidor] = useState<string | null>(null);
   const [tipoPrecio, setTipoPrecio] = useState<'PUBLICO' | 'PROFESIONAL'>('PUBLICO');
   const [descuentoInfo, setDescuentoInfo] = useState<ObtenerCarritoResultado['descuento']>({
@@ -121,6 +126,13 @@ export function CarritoClient({
     if (descuentoInfo.total > 0) return descuentoInfo.total;
     return subtotalEfectivo;
   }, [descuentoInfo.total, subtotalEfectivo]);
+
+  // Beneficio de Envío Gratis exclusivo para clientes en sesión sin distribuidor asignado
+  const UMBRAL_ENVIO_GRATIS = 250000;
+  const esSinDistribuidorActivo = usuarioLogueado && esSinDistribuidorState;
+  const faltaParaEnvioGratis = Math.max(0, UMBRAL_ENVIO_GRATIS - totalEfectivo);
+  const porcentajeProgresoEnvio = Math.min(100, Math.round((totalEfectivo / UMBRAL_ENVIO_GRATIS) * 100));
+  const calificaEnvioGratis = totalEfectivo >= UMBRAL_ENVIO_GRATIS;
 
   // Modificación optimista inmediata de cantidades
   const handleActualizarCantidadItem = (
@@ -209,6 +221,9 @@ export function CarritoClient({
       setNombreDistribuidor(resultado.nombreDistribuidor || null);
       setTipoPrecio(resultado.tipoPrecio);
       setDescuentoInfo(resultado.descuento);
+      if (resultado.esSinDistribuidor !== undefined) {
+        setEsSinDistribuidorState(Boolean(resultado.esSinDistribuidor));
+      }
     });
 
     return () => {
@@ -347,6 +362,72 @@ export function CarritoClient({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* Columna Izquierda: Tabla/Lista de Ítems */}
         <div className="lg:col-span-2 space-y-4">
+          {/* Banner de progreso hacia Envío Gratis (exclusivo para clientes en sesión sin distribuidor asignado) */}
+          {esSinDistribuidorActivo && itemsParaMostrar.length > 0 && (
+            <div
+              id="banner-progreso-envio-gratis"
+              className={`p-4 sm:p-4.5 rounded-2xl border transition-all shadow-xs ${
+                calificaEnvioGratis
+                  ? 'bg-emerald-50/90 border-emerald-300 text-emerald-950'
+                  : 'bg-emerald-50/60 border-emerald-200/90 text-emerald-900'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3 mb-2.5">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                      calificaEnvioGratis
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-emerald-100 text-emerald-800'
+                    }`}
+                  >
+                    {calificaEnvioGratis ? (
+                      <CheckCircle2 className="w-5 h-5" />
+                    ) : (
+                      <Truck className="w-4 h-4" />
+                    )}
+                  </div>
+                  <div>
+                    {calificaEnvioGratis ? (
+                      <span className="text-sm font-bold block text-emerald-950">
+                        ¡Tu pedido califica para Envío Gratis!
+                      </span>
+                    ) : (
+                      <span className="text-sm font-bold block text-emerald-950">
+                        Te faltan <strong className="text-emerald-950 font-black">{formatoMoneda.format(faltaParaEnvioGratis)}</strong> para el Envío Gratis
+                      </span>
+                    )}
+                    <span className="text-xs text-emerald-700 block mt-0.5">
+                      {calificaEnvioGratis
+                        ? 'Superaste los $250.000. El despacho a tu localidad corre 100% por cuenta de fábrica.'
+                        : 'Beneficio exclusivo directo de fábrica en compras superiores a $250.000.'}
+                    </span>
+                  </div>
+                </div>
+
+                <span
+                  className={`text-xs font-bold px-2.5 py-1 rounded-full border shrink-0 ${
+                    calificaEnvioGratis
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-white border-emerald-200 text-emerald-800 shadow-xs'
+                  }`}
+                >
+                  {calificaEnvioGratis ? '¡Alcanzado!' : `${porcentajeProgresoEnvio}%`}
+                </span>
+              </div>
+
+              {/* Barra de progreso visual */}
+              <div className="w-full h-2.5 bg-emerald-100/90 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-500 rounded-full ${
+                    calificaEnvioGratis ? 'bg-emerald-600' : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${porcentajeProgresoEnvio}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between pb-3 border-b border-neutral-200">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-2">
@@ -427,31 +508,9 @@ export function CarritoClient({
                       Precio unitario:{' '}
                       <strong className="text-neutral-800">{formatoMoneda.format(item.precioUnitarioPss)}</strong>
                       <span className="ml-1 text-[10px] text-neutral-500">
-                        ({item.tipo === 'PACK' ? 'Precio Combo Profesional' : item.tipoPrecio === 'PROFESIONAL' ? 'Precio Salón Profesional' : 'Precio Público'})
+                        ({item.tipo === 'PACK' ? 'Precio Salón Profesional Directo de Fábrica' : item.tipoPrecio === 'PROFESIONAL' ? 'Precio Salón Profesional' : 'Precio Público'})
                       </span>
                     </p>
-
-                    {item.tipo === 'PACK' && (
-                      <div className="mt-2.5 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/90 text-[11px] text-amber-900 flex items-start gap-2">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
-                        <div className="leading-snug">
-                          <span className="font-bold text-amber-900 block">
-                            Pack con precio promocional
-                          </span>
-                          <span className="text-amber-800">
-                            {item.tieneDistribuidor || tieneDistribuidor ? (
-                              <>
-                                En cuentas con distribuidor asignado <strong>no aplica el descuento de la cuenta</strong> ya que el precio que posee el pack es promocional de por sí.
-                              </>
-                            ) : (
-                              <>
-                                Este pack posee un <strong>precio promocional cerrado</strong> de por sí y no acumula descuentos de reposición.
-                              </>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                    )}
 
                     {item.precioProfesionalBloqueado !== undefined && item.precioProfesionalBloqueado !== null && (
                       <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-neutral-600 font-medium bg-neutral-100/90 border border-neutral-200/80 rounded-md px-2 py-0.5 w-fit">
@@ -586,13 +645,30 @@ export function CarritoClient({
                 )
               )}
 
-              {/* Aviso si hay packs en el pedido */}
-              {subtotalPacks > 0 && tieneDistribuidor && (
-                <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
-                  <p className="text-[11px] leading-relaxed text-amber-800">
-                    En tu cuenta con distribuidor asignado <strong>no aplica el descuento de la cuenta sobre los packs</strong>, ya que el precio que posee cada combo es promocional de por sí.
-                  </p>
+              {/* Fila de Envío */}
+              {esSinDistribuidorActivo ? (
+                <div className="flex justify-between items-center text-xs py-1 border-t border-neutral-100 pt-2">
+                  <span className="text-neutral-700 flex items-center gap-1.5 font-medium">
+                    <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Envío:</span>
+                  </span>
+                  {calificaEnvioGratis ? (
+                    <span className="font-bold text-emerald-700 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md text-[11px]">
+                      ¡GRATIS!
+                    </span>
+                  ) : (
+                    <span className="text-neutral-600 font-medium text-[11px]">
+                      Faltan {formatoMoneda.format(faltaParaEnvioGratis)}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex justify-between items-center text-xs py-1 text-neutral-500 border-t border-neutral-100 pt-2">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <Truck className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Envío:</span>
+                  </span>
+                  <span className="text-[11px]">A coordinar</span>
                 </div>
               )}
 
@@ -742,12 +818,26 @@ export function CarritoClient({
 
             {/* Reglas Claras de Envío y Transferencia */}
             <div className="pt-4 border-t border-neutral-100 space-y-3">
-              <div className="flex items-start gap-2.5 text-xs text-neutral-500">
-                <PackageCheck className="w-4 h-4 text-gold-600 shrink-0 mt-0.5" />
-                <p>
-                  <strong className="text-neutral-700 font-semibold">Envío a todo el país:</strong> El costo de envío se coordinará y confirmará directamente por WhatsApp según tu localidad o transporte preferido.
-                </p>
-              </div>
+              {esSinDistribuidorActivo ? (
+                <div className="flex items-start gap-2.5 text-xs text-neutral-700 bg-emerald-50/70 border border-emerald-200/90 p-3 rounded-xl">
+                  <Truck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <p>
+                    <strong className="text-emerald-950 font-semibold">
+                      {calificaEnvioGratis ? 'Envío 100% bonificado:' : 'Envío gratis superando los $250.000:'}
+                    </strong>{' '}
+                    {calificaEnvioGratis
+                      ? 'Tu pedido superó los $250.000 en venta directa. No abonás costo de despacho.'
+                      : `Agregá ${formatoMoneda.format(faltaParaEnvioGratis)} más para no abonar costo de envío.`}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-start gap-2.5 text-xs text-neutral-500">
+                  <PackageCheck className="w-4 h-4 text-gold-600 shrink-0 mt-0.5" />
+                  <p>
+                    <strong className="text-neutral-700 font-semibold">Envío a todo el país:</strong> El costo de envío se coordinará y confirmará directamente por WhatsApp según tu localidad o transporte preferido.
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-start gap-2.5 text-xs text-neutral-500">
                 <Sparkles className="w-4 h-4 text-gold-600 shrink-0 mt-0.5" />

@@ -47,6 +47,7 @@ export interface ObtenerCarritoResultado {
   nombreDistribuidor?: string | null;
   subtotalProductos?: number;
   subtotalPacks?: number;
+  esSinDistribuidor?: boolean;
 }
 
 /**
@@ -80,6 +81,7 @@ export async function obtenerProductosDelCarritoAction(
       nombreDistribuidor: null,
       subtotalProductos: 0,
       subtotalPacks: 0,
+      esSinDistribuidor: false,
     };
   }
 
@@ -89,7 +91,10 @@ export async function obtenerProductosDelCarritoAction(
   const esClienteActivo = cliente?.estadoCliente === 'ACTIVO';
   const esPendienteAprobacion = !!sesion && cliente?.estadoCliente === 'PENDIENTE_APROBACION';
   const tieneDistribuidor = Boolean(
-    cliente?.zona?.distribuidorId || cliente?.zona?.estado === 'CON_DISTRIBUIDOR'
+    cliente?.zona?.distribuidorId && cliente?.zona?.estado !== 'SIN_DISTRIBUIDOR'
+  );
+  const esSinDistribuidor = Boolean(
+    sesion && cliente && (!cliente?.zona?.distribuidorId || cliente?.zona?.estado === 'SIN_DISTRIBUIDOR')
   );
   const nombreDistribuidor = cliente?.zona?.distribuidor?.nombre || null;
 
@@ -278,5 +283,6 @@ export async function obtenerProductosDelCarritoAction(
     nombreDistribuidor,
     subtotalProductos,
     subtotalPacks,
+    esSinDistribuidor,
   };
 }

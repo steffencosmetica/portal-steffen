@@ -114,6 +114,7 @@ export default async function DetallePackPage({ params }: PageProps) {
   const tieneDistribuidor = Boolean(
     distribuidorAsignado || zonaCliente?.distribuidorId || zonaCliente?.estado === 'CON_DISTRIBUIDOR'
   );
+  const esSinDistribuidor = Boolean(sesion && cliente && !tieneDistribuidor);
 
   return (
     <div id="detalle-pack-root" className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col justify-between p-4 md:p-8">
@@ -140,6 +141,7 @@ export default async function DetallePackPage({ params }: PageProps) {
         esAdmin={sesion?.rol === 'ADMIN'}
         paginaActual="catalogo"
         mostrarCatalogo={true}
+        sinDistribuidorAsignado={esSinDistribuidor}
       />
 
       {/* Contenido Principal */}

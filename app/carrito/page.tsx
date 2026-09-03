@@ -14,6 +14,10 @@ export default async function CarritoPage() {
   const salonNombre = cliente?.salon || '';
   const estadoCliente = sesion?.estadoCliente || null;
   const esActivo = estadoCliente === 'ACTIVO';
+  const tieneDistribuidor = Boolean(
+    cliente?.zona?.distribuidor || cliente?.zona?.distribuidorId || cliente?.zona?.estado === 'CON_DISTRIBUIDOR'
+  );
+  const esSinDistribuidor = Boolean(sesion && cliente && !tieneDistribuidor);
 
   return (
     <div id="carrito-root" className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col justify-between p-4 md:p-8">
@@ -26,6 +30,7 @@ export default async function CarritoPage() {
         mostrarCarrito={false}
         mostrarCatalogo={true}
         mostrarInicio={true}
+        sinDistribuidorAsignado={esSinDistribuidor}
       />
 
       {/* Main Content */}
@@ -54,6 +59,7 @@ export default async function CarritoPage() {
           usuarioId={usuarioId}
           usuarioLogueado={!!sesion}
           estadoCliente={estadoCliente}
+          esSinDistribuidor={esSinDistribuidor}
         />
       </main>
 

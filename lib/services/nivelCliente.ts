@@ -172,18 +172,18 @@ export async function obtenerEstadoNivelCliente(
   const pluralDiasTranscurridos = diasTranscurridos === 1 ? '1 día' : `${diasTranscurridos} días`;
   const mensajePrincipal = `Llevás ${pluralDiasTranscurridos} desde tu última compra completada.`;
 
-  if (porcentajeActual === 15) {
+  if (porcentajeActual === 25) {
     const pluralRestantes = diasRestantesParaCorte === 1 ? '1 día' : `${diasRestantesParaCorte} días`;
-    mensajeSecundario = `Te quedan ${pluralRestantes} para mantener tu 15% OFF (hasta el día 30). Luego baja al 10% OFF por los siguientes 15 días.`;
-  } else if (porcentajeActual === 10) {
+    mensajeSecundario = `Te quedan ${pluralRestantes} para mantener tu 25% OFF (hasta el día 40). Luego baja al 15% OFF por los siguientes 15 días.`;
+  } else if (porcentajeActual === 15) {
     const pluralRestantes = diasRestantesParaCorte === 1 ? '1 día' : `${diasRestantesParaCorte} días`;
-    mensajeSecundario = `Te quedan ${pluralRestantes} para aprovechar tu 10% OFF antes de los 45 días. Pasado ese plazo, finaliza el beneficio.`;
+    mensajeSecundario = `Te quedan ${pluralRestantes} para aprovechar tu 15% OFF antes de los 55 días. Pasado ese plazo, finaliza el beneficio.`;
   } else if (porcentajeActual !== null && porcentajeActual > 0) {
     const pluralRestantes = diasRestantesParaCorte === 1 ? '1 día' : `${diasRestantesParaCorte} días`;
     mensajeSecundario = `Te quedan ${pluralRestantes} para mantener tu ${porcentajeActual}% OFF.`;
   } else {
-    if (diasTranscurridos > 45) {
-      mensajeSecundario = 'Tu beneficio de reposición caducó a los 45 días. Hacé tu próximo pedido para reactivar tus descuentos.';
+    if (diasTranscurridos > 55) {
+      mensajeSecundario = 'Tu beneficio de reposición caducó a los 55 días. Hacé tu próximo pedido para reactivar tus descuentos.';
     } else {
       mensajeSecundario = 'Hacé tu próximo pedido para empezar a acceder a descuentos por reposición.';
     }

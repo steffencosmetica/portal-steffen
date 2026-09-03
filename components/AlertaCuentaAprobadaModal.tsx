@@ -104,7 +104,7 @@ function AlertaCuentaAprobadaContent({
           {
             icono: Repeat,
             titulo: 'Descuentos por Reposición Continua',
-            descripcion: 'Mantené hasta un 15% OFF al reponer tu stock con regularidad (cada 30 a 45 días).',
+            descripcion: 'Mantené hasta un 25% OFF al reponer tu stock con regularidad (los primeros 40 días, y 15% los 15 días posteriores).',
             badge: 'Fidelidad',
             badgeColor: 'bg-amber-50 text-amber-900 border-amber-300',
           },

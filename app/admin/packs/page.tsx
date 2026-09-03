@@ -51,7 +51,18 @@ export default async function AdminPacksPage() {
         : p.etiqueta || null,
     precioPromocional: Number(p.precioPromocional),
     precioPssEquivalente: p.precioPssEquivalente ? Number(p.precioPssEquivalente) : null,
+    precioOriginal: p.precioOriginal ? Number(p.precioOriginal) : null,
     descuento: p.descuento ? Number(p.descuento) : null,
+    descuentoDistribuidor:
+      p.descuentoDistribuidor !== null && p.descuentoDistribuidor !== undefined
+        ? Number(p.descuentoDistribuidor)
+        : null,
+    descuentoDirecto:
+      p.descuentoDirecto !== null && p.descuentoDirecto !== undefined
+        ? Number(p.descuentoDirecto)
+        : null,
+    precioDistribuidor: p.precioDistribuidor ? Number(p.precioDistribuidor) : null,
+    precioDirecto: p.precioDirecto ? Number(p.precioDirecto) : null,
     fechaInicio: p.fechaInicio ? new Date(p.fechaInicio).toISOString() : null,
     fechaFin: p.fechaFin ? new Date(p.fechaFin).toISOString() : null,
     activo: p.activo,

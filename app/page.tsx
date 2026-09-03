@@ -37,7 +37,8 @@ import {
   Clock,
   BookOpen,
   Briefcase,
-  ImageIcon
+  ImageIcon,
+  CheckCircle2
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -172,14 +173,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           }
 
           const diasDesde = regla.diasDesde ?? 0;
-          const diasHasta = regla.diasHasta ?? (diasDesde <= 30 ? 30 : 45);
+          const diasHasta = regla.diasHasta ?? (diasDesde <= 40 ? 40 : 55);
 
-          if (diasHasta <= 30) {
+          if (diasHasta <= 40) {
             return [
               {
                 titulo: `Reposición ${diasDesde} a ${diasHasta} días`,
                 porcentaje: `${porcentajeNum}% OFF`,
-                tag: 'Rotación Frecuente (0 a 30 días)',
+                tag: `Rotación Frecuente (${diasDesde} a ${diasHasta} días)`,
                 descripcion: `Mantené tu ${porcentajeNum}% OFF reponiendo stock dentro de los primeros ${diasHasta} días de tu última compra completada.`,
                 icono: Award,
                 color: 'border-amber-300 bg-amber-50/50 text-amber-950',
@@ -192,7 +193,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 titulo: `Reposición ${diasDesde} a ${diasHasta} días`,
                 porcentaje: `${porcentajeNum}% OFF`,
                 tag: `Tramo ${diasDesde} a ${diasHasta} días`,
-                descripcion: `Accedé al ${porcentajeNum}% OFF en compras realizadas entre los ${diasDesde} y ${diasHasta} días posteriores a tu compra. Al cumplir 45 días, el beneficio expira.`,
+                descripcion: `Accedé al ${porcentajeNum}% OFF en compras realizadas entre los ${diasDesde} y ${diasHasta} días posteriores a tu compra. Al cumplir ${diasHasta} días, el beneficio expira.`,
                 icono: Clock,
                 color: 'border-neutral-200 bg-white text-neutral-900',
                 badgeColor: 'bg-neutral-100 text-neutral-800 border-neutral-300 font-semibold',
@@ -260,6 +261,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   const distribuidorAsignado = cliente?.zona?.distribuidor || null;
   const zonaCliente = cliente?.zona || null;
+  const esSinDistribuidor = Boolean(sesion && cliente && !tieneDistribuidor);
 
   return (
     <div id="home-root" className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col justify-between p-4 md:p-8">
@@ -286,6 +288,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         salonNombre={cliente?.salon}
         paginaActual="inicio"
         mostrarInicio={false}
+        sinDistribuidorAsignado={esSinDistribuidor}
       />
 
       {/* Main Content */}
@@ -310,43 +313,110 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           estadoCliente={cliente?.estadoCliente}
         />
 
-        {/* 2. Sección Hero */}
+        {/* 2. Sección Hero & Presentación Salón */}
         {!sesion ? (
-          <section id="hero-section" className="relative overflow-hidden bg-neutral-950 text-white rounded-3xl p-8 md:p-14 border border-neutral-800 shadow-xl">
-            {/* Subtle gold accent background */}
-            <div className="absolute top-0 right-0 -mt-16 -mr-16 w-96 h-96 bg-gold-500/10 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute bottom-0 left-0 -mb-16 -ml-16 w-80 h-80 bg-gold-600/10 rounded-full blur-3xl pointer-events-none" />
+          <section id="hero-section" className="relative overflow-hidden bg-gradient-to-b from-neutral-950 via-neutral-900 to-neutral-950 text-white rounded-3xl p-6 sm:p-10 md:p-12 lg:p-14 border border-neutral-800/90 shadow-2xl space-y-10 md:space-y-12">
+            {/* Iluminación de acento sutil */}
+            <div className="absolute top-0 right-0 -mt-20 -mr-20 w-96 h-96 bg-gold-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute top-1/3 left-0 -ml-20 w-80 h-80 bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 right-1/4 -mb-20 w-72 h-72 bg-gold-400/5 rounded-full blur-3xl pointer-events-none" />
 
+            {/* Parte Superior: Presentación Principal "¿Tenés un salón de belleza?" */}
             <div className="relative max-w-3xl space-y-6">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-900 border border-gold-500/30 text-gold-400 text-xs font-semibold">
-                <Sparkles className="w-3.5 h-3.5 text-gold-400" />
-                <span>Venta Directa de Fábrica • Cosmética Profesional</span>
+              {/* Badge de Prestigio */}
+              <div className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-gold-500/10 border border-gold-500/30 text-gold-400 text-xs sm:text-sm font-semibold tracking-wide backdrop-blur-sm shadow-sm">
+                <Sparkles className="w-4 h-4 text-gold-400 shrink-0" />
+                <span>Plataforma exclusiva para peluquerías y salones profesionales</span>
               </div>
 
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-white tracking-tight leading-[1.15]">
-                ¿Tenés un salón de belleza?
-              </h1>
+              {/* Titular Llamativo */}
+              <div className="space-y-3">
+                <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.1]">
+                  ¿Tenés un salón de belleza?
+                </h1>
 
-              <p className="text-base sm:text-lg text-neutral-300 leading-relaxed max-w-2xl font-light">
-                Accedé al Portal Profesional Steffen y encontrá precios exclusivos para el profesional, directos de fábrica. Con tu registro, accedés a un <strong className="text-gold-400 font-semibold">20% OFF en tu primera compra</strong>.
-              </p>
+                <p className="text-base sm:text-lg md:text-xl text-neutral-200 leading-relaxed font-light">
+                  <strong className="text-white font-bold">Registrate y accedé a un <span className="text-gold-400 underline decoration-gold-500/40 underline-offset-4">20% OFF en tu primera compra</span></strong>, además de precios exclusivos para el profesional directo de fábrica, y muchos beneficios más para impulsar el crecimiento de tu salón.
+                </p>
+              </div>
 
-              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+              {/* Badges de Beneficios Clave Inmediatos */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 pt-1">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-gold-500/15 border border-gold-500/40 text-gold-300 text-xs sm:text-sm font-bold shadow-sm">
+                  <CheckCircle2 className="w-4 h-4 text-gold-400 shrink-0" />
+                  <span>20% OFF en tu Primera Compra</span>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-neutral-900/90 border border-neutral-800 text-neutral-300 text-xs sm:text-sm font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Precios Directos de Fábrica</span>
+                </div>
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-neutral-900/90 border border-neutral-800 text-neutral-300 text-xs sm:text-sm font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Envíos a todo el país</span>
+                </div>
+              </div>
+
+              {/* Botones de Acción */}
+              <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 sm:gap-4">
                 <Link
+                  id="btn-hero-registro"
                   href="/registro"
-                  className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-gold-500 hover:bg-gold-400 text-neutral-950 font-bold text-sm sm:text-base shadow-lg shadow-gold-500/20 transition-all hover:scale-[1.01]"
+                  className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl bg-gold-500 hover:bg-gold-400 text-neutral-950 font-black text-sm sm:text-base shadow-xl shadow-gold-500/20 transition-all hover:scale-[1.01] active:scale-[0.99] group"
                 >
                   <span>Registrar mi Salón</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span className="text-xs bg-neutral-950/15 px-2 py-0.5 rounded-md font-bold text-neutral-950">20% OFF</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </Link>
 
                 <Link
+                  id="btn-hero-catalogo"
                   href="/catalogo"
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white border border-neutral-700 hover:border-neutral-600 font-semibold text-sm sm:text-base transition-all"
+                  className="inline-flex items-center justify-center gap-2.5 px-6 py-4 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 text-white border border-neutral-700 hover:border-neutral-600 font-bold text-sm sm:text-base transition-all"
                 >
                   <ShoppingBag className="w-4 h-4 text-gold-400" />
-                  <span>Ver Catálogo</span>
+                  <span>Explorar Catálogo</span>
                 </Link>
+              </div>
+            </div>
+
+            {/* Parte Inferior Integrada: Beneficios Exclusivos en la Misma Sección */}
+            <div id="beneficios-section" className="relative pt-8 md:pt-10 border-t border-neutral-800/80 space-y-6">
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-gold-400 uppercase tracking-widest block">
+                    Plataforma exclusiva para peluquerías y salones profesionales
+                  </span>
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight">
+                    Beneficios diseñados para tu salón
+                  </h2>
+                </div>
+                <p className="text-xs sm:text-sm text-neutral-400 max-w-md font-light">
+                  Diseñada para abastecer tu salón de manera rápida, transparente y con beneficios reales directos de fábrica.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4.5">
+                {beneficios.map((b, idx) => {
+                  const IconComp = b.icono;
+                  return (
+                    <div
+                      key={idx}
+                      className="group bg-neutral-900/60 hover:bg-neutral-900 border border-neutral-800/90 hover:border-gold-500/40 rounded-2xl p-5 sm:p-5.5 transition-all duration-300 flex items-start gap-4 shadow-sm"
+                    >
+                      <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-neutral-950 text-gold-400 border border-neutral-800 flex items-center justify-center shrink-0 group-hover:bg-gold-500 group-hover:text-neutral-950 group-hover:border-gold-400 transition-all duration-300">
+                        <IconComp className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <h3 className="text-sm sm:text-base font-bold text-white tracking-tight group-hover:text-gold-300 transition-colors">
+                          {b.titulo}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed font-light">
+                          {b.descripcion}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </section>
@@ -380,44 +450,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   <ArrowRight className="w-4 h-4" />
                 </Link>
               </div>
-            </div>
-          </section>
-        )}
-
-        {/* 3. Sección "Plataforma exclusiva" (solo para visitantes sin sesión) */}
-        {!sesion && (
-          <section id="beneficios-section" className="space-y-8 md:space-y-10">
-            <div className="text-center max-w-3xl mx-auto space-y-3">
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-neutral-900 tracking-tight">
-                Plataforma exclusiva para peluquerías y salones profesionales.
-              </h2>
-              <p className="text-neutral-600 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
-                Diseñada para abastecer tu salón de manera rápida, transparente y con beneficios reales.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-              {beneficios.map((b, idx) => {
-                const IconComp = b.icono;
-                return (
-                  <div
-                    key={idx}
-                    className="group bg-white border border-neutral-200/90 rounded-2xl p-6 sm:p-7 shadow-sm hover:border-gold-300 hover:shadow-md transition-all duration-300 flex items-start gap-4 sm:gap-5"
-                  >
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-neutral-950 text-gold-400 border border-neutral-800 flex items-center justify-center shrink-0 shadow-sm group-hover:bg-gold-500 group-hover:text-neutral-950 group-hover:border-gold-400 transition-all duration-300">
-                      <IconComp className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </div>
-                    <div className="space-y-1.5 flex-1 min-w-0">
-                      <h3 className="text-base sm:text-lg font-bold text-neutral-900 tracking-tight leading-snug group-hover:text-gold-800 transition-colors">
-                        {b.titulo}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
-                        {b.descripcion}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </section>
         )}

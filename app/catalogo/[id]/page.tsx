@@ -238,6 +238,8 @@ export default async function DetalleProductoPage({ params }: PageProps) {
 
   const distribuidorAsignado = cliente?.zona?.distribuidor || null;
   const zonaCliente = cliente?.zona || null;
+  const tieneDistribuidor = Boolean(distribuidorAsignado || zonaCliente?.distribuidorId || zonaCliente?.estado === 'CON_DISTRIBUIDOR');
+  const esSinDistribuidor = Boolean(sesion && cliente && !tieneDistribuidor);
   const descuentoEstimadoPorcentaje = estadoNivel?.porcentajeActual || null;
   const esAdmin = sesion?.rol === 'ADMIN';
 
@@ -274,6 +276,7 @@ export default async function DetalleProductoPage({ params }: PageProps) {
         esAdmin={sesion?.rol === 'ADMIN'}
         paginaActual="catalogo"
         mostrarCatalogo={true}
+        sinDistribuidorAsignado={esSinDistribuidor}
       />
 
       {/* Contenido Principal */}

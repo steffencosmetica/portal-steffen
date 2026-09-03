@@ -10,7 +10,8 @@ import {
   User, 
   LogOut, 
   LogIn, 
-  UserPlus 
+  UserPlus,
+  Truck 
 } from 'lucide-react';
 
 export interface SiteHeaderProps {
@@ -24,6 +25,7 @@ export interface SiteHeaderProps {
   mostrarInicio?: boolean;
   className?: string;
   children?: React.ReactNode;
+  sinDistribuidorAsignado?: boolean;
 }
 
 export function SiteHeader({
@@ -37,9 +39,23 @@ export function SiteHeader({
   mostrarInicio = true,
   className = '',
   children,
+  sinDistribuidorAsignado = false,
 }: SiteHeaderProps) {
   return (
-    <header className={`max-w-7xl mx-auto w-full flex items-center justify-between gap-2 pb-6 border-b border-neutral-200 ${className}`}>
+    <header className={`max-w-7xl mx-auto w-full pb-6 border-b border-neutral-200 ${className}`}>
+      {/* Línea superior de Envío Gratis (exclusivo para clientes en sesión sin distribuidor asignado) */}
+      {sesion && sinDistribuidorAsignado && (
+        <div
+          id="linea-superior-envio-gratis"
+          className="w-full bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-700 text-white text-xs sm:text-sm font-bold py-2.5 px-4 rounded-2xl mb-4 flex items-center justify-center gap-2.5 shadow-sm border border-emerald-500/30 tracking-wide"
+        >
+          <Truck className="w-4 h-4 text-emerald-200 shrink-0" />
+          <span>Envío gratis superando los $250.000</span>
+          <span className="hidden md:inline text-emerald-200 font-normal text-xs">• Directo de fábrica a tu salón</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-2">
       {/* Lado izquierdo: Logo + Texto de acompañamiento + Badge de Salón */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0 shrink-0">
         <Link href="/" className="flex items-center gap-2 sm:gap-3 group shrink-0">
@@ -177,6 +193,7 @@ export function SiteHeader({
 
         {/* Elementos adicionales personalizados si una vista los requiere */}
         {children}
+      </div>
       </div>
     </header>
   );
