@@ -26,7 +26,7 @@ import {
   Boxes,
 } from 'lucide-react';
 import { ETIQUETAS_PACK_CONFIG, EtiquetaPack } from '@/lib/constants/packs';
-import { limpiarDescripcionPack, calcularPotencialReventa } from '@/lib/services/reventa';
+import { limpiarDescripcionPack, calcularPotencialReventa, obtenerUnidadesExhibidora } from '@/lib/services/reventa';
 import { TarjetaPotencialReventa } from './TarjetaPotencialReventa';
 
 export interface DetallePackClientProps {
@@ -139,6 +139,23 @@ export function DetallePackClient({
       ? Math.round(((subtotalBase - pack.precioPromocional) / subtotalBase) * 100)
       : null;
 
+  // Factor de descuento efectivo para prorratear en los productos del combo
+  const factorDescuento = useMemo(() => {
+    if (subtotalBase && subtotalBase > 0 && pack.precioPromocional < subtotalBase) {
+      return pack.precioPromocional / subtotalBase;
+    }
+    if (pack.descuento && pack.descuento > 0) {
+      return (100 - pack.descuento) / 100;
+    }
+    return null;
+  }, [subtotalBase, pack.precioPromocional, pack.descuento]);
+
+  const porcentajeDescuentoEfectivo =
+    porcentajeAhorro ||
+    (factorDescuento !== null && factorDescuento < 1
+      ? Math.round((1 - factorDescuento) * 100)
+      : null);
+
   return (
     <div id="detalle-pack-client" className="space-y-12">
       {/* Navegación Breadcrumb y Volver */}
@@ -242,6 +259,21 @@ export function DetallePackClient({
                 {pack.items.map((item, idx) => {
                   const subtotalItem = item.precioUnitario && item.precioUnitario > 0 ? item.precioUnitario * item.cantidad : null;
 
+                  const tieneDescuento = factorDescuento !== null && factorDescuento < 1;
+                  const precioFinalUnitario = item.precioUnitario && item.precioUnitario > 0 && tieneDescuento
+                    ? Math.round(item.precioUnitario * factorDescuento)
+                    : item.precioUnitario;
+
+                  const subtotalFinal = subtotalItem && tieneDescuento
+                    ? Math.round(subtotalItem * factorDescuento)
+                    : subtotalItem;
+
+                  const unidadesExhibidora = obtenerUnidadesExhibidora(item.nombre, item.presentacion);
+                  const precioFinalPorUnidadExhibidora =
+                    unidadesExhibidora && unidadesExhibidora > 1 && precioFinalUnitario
+                      ? Math.round(precioFinalUnitario / unidadesExhibidora)
+                      : null;
+
                   return (
                     <div key={item.productoId || idx} className="p-3.5 flex items-center justify-between gap-3 text-xs">
                       <div className="flex items-center gap-3 min-w-0">
@@ -279,15 +311,57 @@ export function DetallePackClient({
                           </div>
 
                           {!estaBloqueado && item.precioUnitario && item.precioUnitario > 0 && (
-                            <p className="text-[11px] text-neutral-600 mt-1">
-                              <span className="text-neutral-500">Lista unitario:</span>{' '}
-                              <span className="font-semibold text-neutral-800">{formatoMoneda.format(item.precioUnitario)}</span>
-                              {item.cantidad > 1 && (
-                                <span className="text-neutral-500 font-normal">
-                                  {' '}• Subtotal ({item.cantidad}u): <strong className="text-neutral-800">{formatoMoneda.format(subtotalItem!)}</strong>
-                                </span>
+                            <div className="mt-1.5 space-y-1">
+                              {tieneDescuento && precioFinalUnitario ? (
+                                <>
+                                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11px]">
+                                    <span className="text-neutral-400 line-through font-mono">
+                                      {formatoMoneda.format(item.precioUnitario)}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 text-emerald-900 font-bold bg-emerald-50 border border-emerald-200/90 px-2 py-0.5 rounded text-[11px]">
+                                      <span>Te queda a:</span>
+                                      <strong className="font-mono text-emerald-950 font-extrabold text-xs">
+                                        {formatoMoneda.format(precioFinalUnitario)}
+                                      </strong>
+                                      <span className="text-[10px] font-normal text-emerald-700">c/u</span>
+                                      {porcentajeDescuentoEfectivo && (
+                                        <span className="text-[9px] bg-emerald-600 text-white font-black px-1 rounded ml-0.5">
+                                          -{porcentajeDescuentoEfectivo}%
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+
+                                  {precioFinalPorUnidadExhibidora && (
+                                    <p className="text-[10px] text-emerald-700 font-medium">
+                                      ↳ Equivale a <strong className="font-mono">{formatoMoneda.format(precioFinalPorUnidadExhibidora)}</strong> por unidad individual ({unidadesExhibidora} u.)
+                                    </p>
+                                  )}
+
+                                  {item.cantidad > 1 && subtotalFinal && (
+                                    <p className="text-[11px] text-neutral-600">
+                                      <span className="text-neutral-500">Subtotal ({item.cantidad}u):</span>{' '}
+                                      <span className="text-neutral-400 line-through font-mono mr-1 text-[10px]">
+                                        {formatoMoneda.format(subtotalItem!)}
+                                      </span>
+                                      <strong className="font-mono text-emerald-900 font-bold">
+                                        {formatoMoneda.format(subtotalFinal)}
+                                      </strong>
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="text-[11px] text-neutral-600">
+                                  <span className="text-neutral-500">Lista unitario:</span>{' '}
+                                  <span className="font-semibold text-neutral-800">{formatoMoneda.format(item.precioUnitario)}</span>
+                                  {item.cantidad > 1 && (
+                                    <span className="text-neutral-500 font-normal">
+                                      {' '}• Subtotal ({item.cantidad}u): <strong className="text-neutral-800">{formatoMoneda.format(subtotalItem!)}</strong>
+                                    </span>
+                                  )}
+                                </p>
                               )}
-                            </p>
+                            </div>
                           )}
                         </div>
                       </div>
@@ -297,10 +371,17 @@ export function DetallePackClient({
                         <span className="text-xs font-black text-amber-900 bg-amber-100 border border-amber-300/80 px-2.5 py-0.5 rounded-md">
                           x{item.cantidad}
                         </span>
-                        {!estaBloqueado && subtotalItem && subtotalItem > 0 && (
-                          <span className="text-xs font-bold text-neutral-800">
-                            {formatoMoneda.format(subtotalItem)}
-                          </span>
+                        {!estaBloqueado && (
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-neutral-900 block">
+                              {formatoMoneda.format(subtotalFinal || subtotalItem || 0)}
+                            </span>
+                            {tieneDescuento && subtotalItem && subtotalFinal && subtotalItem > subtotalFinal ? (
+                              <span className="text-[10px] text-neutral-400 line-through block font-mono">
+                                {formatoMoneda.format(subtotalItem)}
+                              </span>
+                            ) : null}
+                          </div>
                         )}
                       </div>
                     </div>
