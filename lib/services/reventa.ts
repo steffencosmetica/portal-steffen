@@ -56,7 +56,7 @@ export function limpiarDescripcionPack(texto: string | null | undefined): {
 
 /**
  * Calcula automáticamente la proyección económica de reventa para un pack:
- * 1. Facturación potencial con precio sugerido = Sumatoria de (cantidad * precioEcommerce) de cada producto.
+ * 1. Facturación potencial con precio sugerido = Sumatoria de (cantidad * precioSugeridoVentaSalon) de cada producto.
  * 2. Inversión en el pack = Precio final con el descuento que se le aplica al salón (pack.precioPromocional).
  * 3. Ganancia potencial estimada = Facturación potencial - Inversión en el pack.
  */

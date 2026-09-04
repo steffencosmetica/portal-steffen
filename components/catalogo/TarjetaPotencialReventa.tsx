@@ -85,7 +85,7 @@ export function TarjetaPotencialReventa({
               {formatoMoneda.format(facturacionPotencial)}
             </span>
             <span className="text-[10px] text-neutral-500">
-              Público e-commerce sugerido
+              Sugerido venta en salón
             </span>
           </div>
         </div>
@@ -200,7 +200,7 @@ export function TarjetaPotencialReventa({
       <p className="text-[10px] text-neutral-500 leading-normal border-t border-emerald-100/80 pt-2 flex items-start gap-1.5">
         <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
         <span>
-          Cálculo automatizado tomando como referencia el precio final bonificado del pack como inversión para tu salón, y el precio oficial de venta al público sugerido en e-commerce (cuentas sin registro).
+          Cálculo automatizado tomando como referencia el precio final bonificado del pack como inversión para tu salón, y el precio sugerido de venta al público en salones.
         </span>
       </p>
     </div>
