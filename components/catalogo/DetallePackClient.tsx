@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCart } from '@/lib/context/CartContext';
@@ -26,6 +26,8 @@ import {
   Boxes,
 } from 'lucide-react';
 import { ETIQUETAS_PACK_CONFIG, EtiquetaPack } from '@/lib/constants/packs';
+import { limpiarDescripcionPack, calcularPotencialReventa } from '@/lib/services/reventa';
+import { TarjetaPotencialReventa } from './TarjetaPotencialReventa';
 
 export interface DetallePackClientProps {
   pack: PackDTO;
@@ -64,6 +66,16 @@ export function DetallePackClient({
 
   const totalUnidades = (pack.items || []).reduce((acc, curr) => acc + curr.cantidad, 0);
   const metaEtiqueta = pack.etiqueta ? ETIQUETAS_PACK_CONFIG[pack.etiqueta as EtiquetaPack] : null;
+
+  const { descripcionLimpia, beneficiosExclusivos } = useMemo(
+    () => limpiarDescripcionPack(pack.descripcion),
+    [pack.descripcion]
+  );
+
+  const potencial = useMemo(
+    () => calcularPotencialReventa(pack),
+    [pack]
+  );
 
   const handleIncrement = () => setCantidad((prev) => prev + 1);
   const handleDecrement = () => setCantidad((prev) => (prev > 1 ? prev - 1 : 1));
@@ -409,14 +421,35 @@ export function DetallePackClient({
           </div>
 
           {/* Título Principal */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 tracking-tight leading-snug">
               {pack.nombre}
             </h1>
-            <p className="text-sm text-neutral-600 leading-relaxed">
-              {pack.descripcion}
-            </p>
+            {descripcionLimpia && (
+              <p className="text-sm text-neutral-600 leading-relaxed whitespace-pre-line">
+                {descripcionLimpia}
+              </p>
+            )}
+
+            {beneficiosExclusivos && (
+              <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200/90 text-xs text-amber-950 flex items-start gap-2.5 shadow-2xs">
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-extrabold block text-amber-900 uppercase tracking-wide text-[11px]">
+                    Beneficios Exclusivos Incluidos:
+                  </span>
+                  <span className="text-neutral-700 leading-relaxed mt-0.5 block">
+                    {beneficiosExclusivos}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Tarjeta Aparte: Potencial de Reventa Sugerido (debajo de la descripción) */}
+          {potencial.esPackReventa && (
+            <TarjetaPotencialReventa potencial={potencial} />
+          )}
 
           {/* Bloque de Precio y Estado Comercial */}
           <div className="p-5 rounded-2xl bg-neutral-50 border border-neutral-200/90 space-y-3">

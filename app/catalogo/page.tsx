@@ -144,6 +144,7 @@ export default async function CatalogoPage() {
             codigo: it.producto?.codigo || null,
             imagen: it.producto?.imagen || null,
             precioUnitario: it.producto?.precioPss ? Number(it.producto.precioPss) : null,
+            precioEcommerce: it.producto?.precioEcommerce ? Number(it.producto.precioEcommerce) : null,
           })),
         };
       })

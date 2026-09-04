@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ShoppingBag, Plus, Minus, Sparkles, AlertCircle, Layers, Tag, Lock, ChevronRight } from 'lucide-react';
+import { ShoppingBag, Plus, Minus, Sparkles, AlertCircle, Layers, Tag, Lock, ChevronRight, TrendingUp } from 'lucide-react';
 import { ETIQUETAS_PACK_CONFIG, EtiquetaPack } from '@/lib/constants/packs';
+import { limpiarDescripcionPack, calcularPotencialReventa } from '@/lib/services/reventa';
 
 export interface PackItemDTO {
   productoId: string;
@@ -14,6 +15,7 @@ export interface PackItemDTO {
   codigo?: string | null;
   imagen?: string | null;
   precioUnitario?: number | null;
+  precioEcommerce?: number | null;
 }
 
 export interface PackDTO {
@@ -61,6 +63,9 @@ export function PackCard({
 
   const totalUnidades = (pack.items || []).reduce((acc, curr) => acc + curr.cantidad, 0);
   const metaEtiqueta = pack.etiqueta ? ETIQUETAS_PACK_CONFIG[pack.etiqueta as EtiquetaPack] : null;
+
+  const { descripcionLimpia } = useMemo(() => limpiarDescripcionPack(pack.descripcion), [pack.descripcion]);
+  const potencial = useMemo(() => calcularPotencialReventa(pack), [pack]);
 
   const MAX_ITEMS_CARD = 4;
   const itemsVisibles = (pack.items || []).slice(0, MAX_ITEMS_CARD);
@@ -178,12 +183,20 @@ export function PackCard({
                 {pack.nombre}
               </h3>
             </Link>
-            {pack.descripcion ? (
+            {descripcionLimpia ? (
               <p className="text-xs text-neutral-600 mt-1.5 leading-relaxed line-clamp-3 min-h-[3.5rem]">
-                {pack.descripcion}
+                {descripcionLimpia}
               </p>
             ) : (
               <div className="min-h-[3.5rem]" />
+            )}
+
+            {potencial.esPackReventa && potencial.gananciaPotencial > 0 && !estaBloqueado && (
+              <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800 font-bold">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Ganancia sugerida: +{formatoMoneda.format(potencial.gananciaPotencial)}</span>
+                <span className="text-emerald-600 text-[10px]">({potencial.porcentajeGanancia}%)</span>
+              </div>
             )}
           </div>
 
