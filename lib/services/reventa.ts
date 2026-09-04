@@ -81,15 +81,20 @@ export function calcularPotencialReventa(pack: {
   let facturacionTotal = 0;
 
   for (const it of pack.items || []) {
-    // Si el ítem tiene precioEcommerce asignado > 0 se usa directamente;
-    // si no, se toma como referencia de precio público el precioPss * 1.45 (margen e-commerce promedio)
-    let pEcom = it.precioEcommerce !== undefined && it.precioEcommerce !== null && it.precioEcommerce > 0
-      ? it.precioEcommerce
-      : it.precioUnitario && it.precioUnitario > 0
-      ? Math.round(it.precioUnitario * 1.45)
-      : 0;
+    // Prioridad para el precio de reventa sugerido:
+    // 1. precioReventa específico del producto (cargado para packs de reventa)
+    // 2. precioEcommerce (precio público de referencia)
+    // 3. precioUnitario * 1.45 como margen estimado de respaldo
+    let pSugerido = 0;
+    if (it.precioReventa !== undefined && it.precioReventa !== null && it.precioReventa > 0) {
+      pSugerido = it.precioReventa;
+    } else if (it.precioEcommerce !== undefined && it.precioEcommerce !== null && it.precioEcommerce > 0) {
+      pSugerido = it.precioEcommerce;
+    } else if (it.precioUnitario && it.precioUnitario > 0) {
+      pSugerido = Math.round(it.precioUnitario * 1.45);
+    }
 
-    const subtotalItem = pEcom * it.cantidad;
+    const subtotalItem = pSugerido * it.cantidad;
     facturacionTotal += subtotalItem;
 
     itemsDetalle.push({
@@ -97,7 +102,7 @@ export function calcularPotencialReventa(pack: {
       nombre: it.nombre,
       presentacion: it.presentacion,
       cantidad: it.cantidad,
-      precioEcommerceUnitario: pEcom,
+      precioEcommerceUnitario: pSugerido,
       subtotalEcommerce: subtotalItem,
     });
   }

@@ -835,6 +835,7 @@ export function CargaMasivaClient({ modoInicial = 'PRODUCTOS' }: CargaMasivaClie
                       <th className="py-3 px-3.5">Presentación</th>
                       <th className="py-3 px-3.5 text-right">Salón Profesional</th>
                       <th className="py-3 px-3.5 text-right">Público</th>
+                      <th className="py-3 px-3.5 text-right">Reventa Sug.</th>
                       <th className="py-3 px-3.5 text-center">Stock</th>
                       <th className="py-3 px-3.5">Imagen</th>
                       <th className="py-3 px-3.5 min-w-[200px]">Estado / Errores</th>
@@ -843,7 +844,7 @@ export function CargaMasivaClient({ modoInicial = 'PRODUCTOS' }: CargaMasivaClie
                   <tbody className="divide-y divide-neutral-100">
                     {filasFiltradasProductos.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="py-8 text-center text-neutral-400">
+                        <td colSpan={12} className="py-8 text-center text-neutral-400">
                           No se encontraron filas con el filtro aplicado.
                         </td>
                       </tr>
@@ -893,6 +894,13 @@ export function CargaMasivaClient({ modoInicial = 'PRODUCTOS' }: CargaMasivaClie
                             </td>
                             <td className="py-3 px-3.5 text-right font-mono text-neutral-700 whitespace-nowrap">
                               {formatoMoneda.format(fila.datos.precioEcommerce)}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-mono text-emerald-700 whitespace-nowrap">
+                              {fila.datos.precioReventa ? (
+                                formatoMoneda.format(fila.datos.precioReventa)
+                              ) : (
+                                <span className="text-neutral-300">-</span>
+                              )}
                             </td>
                             <td className="py-3 px-3.5 text-center font-semibold text-neutral-800 whitespace-nowrap">
                               {fila.datos.stock} u.

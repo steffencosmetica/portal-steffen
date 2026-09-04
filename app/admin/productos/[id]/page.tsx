@@ -85,6 +85,7 @@ export default async function AdminProductoDetallePage({ params }: AdminProducto
               presentacion: producto.presentacion,
               precioPss: Number(producto.precioPss),
               precioEcommerce: Number(producto.precioEcommerce),
+              precioReventa: producto.precioReventa ? Number(producto.precioReventa) : null,
               stock: producto.stock,
               variantes: producto.variantes || null,
               ordenVisualizacion: producto.ordenVisualizacion,

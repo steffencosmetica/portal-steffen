@@ -19,6 +19,7 @@ export interface GuardarProductoData {
   rendimientoSalon?: string | null;
   precioPss: number;
   precioEcommerce: number;
+  precioReventa?: number | null;
   stock: number;
   variantes?: string | null;
   activo?: boolean;
@@ -118,6 +119,10 @@ export async function guardarProductoAction(
       return { success: false, error: 'El Precio Público de Referencia (Ecommerce) debe ser un número mayor a 0.' };
     }
 
+    const precioReventa = data.precioReventa !== undefined && data.precioReventa !== null && !isNaN(Number(data.precioReventa)) && Number(data.precioReventa) > 0
+      ? Number(data.precioReventa)
+      : null;
+
     const stock = Number(data.stock);
     if (isNaN(stock) || !Number.isInteger(stock) || stock < 0) {
       return { success: false, error: 'El stock debe ser un número entero mayor o igual a 0.' };
@@ -177,6 +182,7 @@ export async function guardarProductoAction(
           rendimientoSalon,
           precioPss: new Prisma.Decimal(precioPss),
           precioEcommerce: new Prisma.Decimal(precioEcommerce),
+          precioReventa: precioReventa ? new Prisma.Decimal(precioReventa) : null,
           stock,
           variantes,
           activo,
@@ -200,6 +206,7 @@ export async function guardarProductoAction(
           rendimientoSalon,
           precioPss: new Prisma.Decimal(precioPss),
           precioEcommerce: new Prisma.Decimal(precioEcommerce),
+          precioReventa: precioReventa ? new Prisma.Decimal(precioReventa) : null,
           stock,
           variantes,
           activo,

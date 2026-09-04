@@ -41,6 +41,7 @@ export interface ProductoListItemDTO {
   imagen: string;
   precioPss: number;
   precioEcommerce: number;
+  precioReventa?: number | null;
   stock: number;
   activo: boolean;
   destacado: boolean;
@@ -441,6 +442,14 @@ export function ProductosListClient({ productosIniciales }: ProductosListClientP
                         <span>Salón Profesional: <strong className="text-gold-700 font-mono">{formatoMoneda.format(prod.precioPss)}</strong></span>
                         <span>•</span>
                         <span>Público: <strong className="text-neutral-900 font-mono">{formatoMoneda.format(prod.precioEcommerce)}</strong></span>
+                        {prod.precioReventa ? (
+                          <>
+                            <span>•</span>
+                            <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60">
+                              Reventa sug.: <strong className="font-mono text-emerald-800">{formatoMoneda.format(prod.precioReventa)}</strong>
+                            </span>
+                          </>
+                        ) : null}
                         <span>•</span>
                         <span>
                           Stock:{' '}

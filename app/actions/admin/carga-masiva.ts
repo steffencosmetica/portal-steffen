@@ -26,6 +26,7 @@ export interface FilaExcelDatos {
   rendimientoSalon: string | null;
   precioPss: number;
   precioEcommerce: number;
+  precioReventa?: number | null;
   stock: number;
   activo: boolean;
   destacado: boolean;
@@ -334,6 +335,7 @@ export async function generarPlantillaExcelAction(): Promise<{
       'rendimientoSalon',
       'precioPss',
       'precioEcommerce',
+      'precioReventa',
       'stock',
       'activo',
       'destacado',
@@ -354,6 +356,7 @@ export async function generarPlantillaExcelAction(): Promise<{
       'Aproximadamente 80 a 100 servicios de finalizado y sellado en tocador.',
       14500,
       21500,
+      21500, // precioReventa (sugerido para packs de reventa)
       50,
       'SI',
       'NO',
@@ -374,6 +377,7 @@ export async function generarPlantillaExcelAction(): Promise<{
       'Rinde entre 50 y 60 lavados profesionales en lavacabezas.',
       18900,
       28500,
+      28500, // precioReventa (sugerido para packs de reventa)
       30,
       'SI',
       'SI',
@@ -398,6 +402,7 @@ export async function generarPlantillaExcelAction(): Promise<{
       { wch: 40 }, // rendimientoSalon
       { wch: 14 }, // precioPss
       { wch: 16 }, // precioEcommerce
+      { wch: 16 }, // precioReventa
       { wch: 10 }, // stock
       { wch: 10 }, // activo
       { wch: 12 }, // destacado
@@ -614,6 +619,18 @@ export async function previsualizarCargaMasivaAction(formData: FormData): Promis
         errores.push('El campo "precioEcommerce" debe ser un número mayor a 0.');
       }
 
+      // Precio Sugerido de Reventa (Opcional - Usado para armar packs Reventa)
+      const precioReventaRaw = rawNormalized['precioreventa'] ?? rawNormalized['precio_reventa'] ?? rawNormalized['preciosugeridoreventa'] ?? null;
+      let precioReventa: number | null = null;
+      if (precioReventaRaw !== null && precioReventaRaw !== undefined && String(precioReventaRaw).trim() !== '') {
+        const pRevNum = Number(precioReventaRaw);
+        if (!isNaN(pRevNum) && pRevNum > 0) {
+          precioReventa = pRevNum;
+        } else {
+          errores.push('Si se especifica, el campo "precioReventa" debe ser un número mayor a 0.');
+        }
+      }
+
       // Stock
       const stockRaw = Number(rawNormalized['stock'] ?? 0);
       if (isNaN(stockRaw) || !Number.isInteger(stockRaw) || stockRaw < 0) {
@@ -669,6 +686,7 @@ export async function previsualizarCargaMasivaAction(formData: FormData): Promis
           rendimientoSalon,
           precioPss: isNaN(precioPssNum) ? 0 : precioPssNum,
           precioEcommerce: isNaN(precioEcomNum) ? 0 : precioEcomNum,
+          precioReventa,
           stock,
           activo,
           destacado,
@@ -831,6 +849,10 @@ export async function confirmarCargaMasivaAction(filas: FilaValidada[]): Promise
         }
       }
 
+      const precioReventa = datos.precioReventa !== null && datos.precioReventa !== undefined && Number(datos.precioReventa) > 0
+        ? Number(datos.precioReventa)
+        : null;
+
       const subcategoria = datos.subcategoria?.trim() || null;
       const modoUso = datos.modoUso?.trim() || null;
       const rendimientoSalon = datos.rendimientoSalon?.trim() || null;
@@ -857,6 +879,7 @@ export async function confirmarCargaMasivaAction(filas: FilaValidada[]): Promise
             ...(rendimientoSalon !== null ? { rendimientoSalon } : {}),
             precioPss: new Prisma.Decimal(precioPss),
             precioEcommerce: new Prisma.Decimal(precioEcommerce),
+            ...(precioReventa !== null ? { precioReventa: new Prisma.Decimal(precioReventa) } : {}),
             stock,
             activo,
             destacado,
@@ -885,6 +908,7 @@ export async function confirmarCargaMasivaAction(filas: FilaValidada[]): Promise
             imagen: imagenParaCrear,
             precioPss: new Prisma.Decimal(precioPss),
             precioEcommerce: new Prisma.Decimal(precioEcommerce),
+            ...(precioReventa !== null ? { precioReventa: new Prisma.Decimal(precioReventa) } : {}),
             stock,
             activo,
             destacado,

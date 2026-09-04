@@ -46,6 +46,7 @@ export default async function AdminProductosPage() {
     imagen: p.imagen,
     precioPss: Number(p.precioPss),
     precioEcommerce: Number(p.precioEcommerce),
+    precioReventa: p.precioReventa ? Number(p.precioReventa) : null,
     stock: p.stock,
     activo: p.activo,
     destacado: p.destacado,

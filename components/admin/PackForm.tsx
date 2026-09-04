@@ -26,6 +26,8 @@ export interface ProductoOption {
   categoria: string;
   presentacion: string;
   precioPss: number;
+  precioEcommerce?: number;
+  precioReventa?: number | null;
   stock: number;
   activo: boolean;
   imagen: string;
@@ -126,6 +128,58 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
 
   const ahorroDist = sumaPssEquivalente > 0 && descDistNum > 0 ? sumaPssEquivalente - precioConDistribuidorCalculado : 0;
   const ahorroDirecto = sumaPssEquivalente > 0 && descDirectoNum > 0 ? sumaPssEquivalente - precioSinDistribuidorCalculado : 0;
+
+  // Proyección de potencial de reventa si el pack es de tipo Reventa
+  const esPackReventa = useMemo(() => {
+    const et = (etiqueta || '').toLowerCase();
+    const nom = (nombre || '').toLowerCase();
+    return et.includes('reventa') || nom.includes('reventa');
+  }, [etiqueta, nombre]);
+
+  const proyeccionReventa = useMemo(() => {
+    if (!esPackReventa || items.length === 0) return null;
+
+    let facturacionTotal = 0;
+    const itemsDetalle = items.map((it) => {
+      const prod = productosMap.get(it.productoId);
+      const precioSugerido =
+        prod?.precioReventa && prod.precioReventa > 0
+          ? prod.precioReventa
+          : prod?.precioEcommerce && prod.precioEcommerce > 0
+          ? prod.precioEcommerce
+          : prod?.precioPss
+          ? Math.round(prod.precioPss * 1.45)
+          : 0;
+
+      const subtotal = precioSugerido * it.cantidad;
+      facturacionTotal += subtotal;
+
+      return {
+        nombre: prod?.nombre || 'Producto',
+        presentacion: prod?.presentacion || '',
+        cantidad: it.cantidad,
+        precioSugerido,
+        tienePrecioReventaEspecifico: Boolean(prod?.precioReventa && prod.precioReventa > 0),
+        subtotal,
+      };
+    });
+
+    const inversionEstimada =
+      precioSinDistribuidorCalculado > 0
+        ? precioSinDistribuidorCalculado
+        : sumaPssEquivalente;
+
+    const gananciaEstimada = Math.max(0, facturacionTotal - inversionEstimada);
+    const retorno = inversionEstimada > 0 ? Math.round((gananciaEstimada / inversionEstimada) * 100) : 0;
+
+    return {
+      facturacionTotal,
+      inversionEstimada,
+      gananciaEstimada,
+      retorno,
+      itemsDetalle,
+    };
+  }, [esPackReventa, items, productosMap, precioSinDistribuidorCalculado, sumaPssEquivalente]);
 
   const formatoMoneda = new Intl.NumberFormat('es-AR', {
     style: 'currency',
@@ -545,9 +599,19 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
                         </div>
                         <div>
                           <p className="font-bold text-neutral-900 line-clamp-1">{prod.nombre}</p>
-                          <p className="text-neutral-500 text-[11px]">
-                            {prod.presentacion} • Salón Profesional: {formatoMoneda.format(prod.precioPss)}
-                          </p>
+                          <div className="text-neutral-500 text-[11px] flex flex-wrap items-center gap-1.5 mt-0.5">
+                            <span>{prod.presentacion}</span>
+                            <span>•</span>
+                            <span>Salón: {formatoMoneda.format(prod.precioPss)}</span>
+                            {prod.precioReventa ? (
+                              <>
+                                <span>•</span>
+                                <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                  Reventa sug: {formatoMoneda.format(prod.precioReventa)}
+                                </span>
+                              </>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
 
@@ -626,6 +690,51 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
               </div>
             </div>
           </div>
+
+          {/* Card Potencial de Reventa si es Pack Reventa */}
+          {proyeccionReventa && (
+            <div className="bg-gradient-to-br from-emerald-950 via-emerald-900 to-neutral-900 text-white border border-emerald-800/70 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-emerald-800/50 pb-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  Potencial de Reventa Sugerido
+                </h3>
+                <span className="text-[10px] font-bold bg-emerald-800/90 text-emerald-200 px-2.5 py-0.5 rounded-full border border-emerald-600/50">
+                  Pack Reventa
+                </span>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div className="flex justify-between items-center text-emerald-100/90">
+                  <span>Facturación potencial con precio sugerido:</span>
+                  <strong className="font-mono text-sm text-white font-bold">
+                    {formatoMoneda.format(proyeccionReventa.facturacionTotal)}
+                  </strong>
+                </div>
+                <div className="flex justify-between items-center text-emerald-200/70">
+                  <span>Inversión estimada del salón:</span>
+                  <span className="font-mono text-xs text-emerald-200">
+                    {formatoMoneda.format(proyeccionReventa.inversionEstimada)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center pt-2.5 border-t border-emerald-800/50 text-emerald-300 font-bold">
+                  <span>Ganancia potencial estimada:</span>
+                  <span className="font-mono text-base text-emerald-400">
+                    {formatoMoneda.format(proyeccionReventa.gananciaEstimada)}
+                  </span>
+                </div>
+                {proyeccionReventa.retorno > 0 && (
+                  <p className="text-[11px] text-emerald-200 text-right pt-0.5">
+                    Retorno proyectado: <strong className="text-white">+{proyeccionReventa.retorno}%</strong> sobre inversión
+                  </p>
+                )}
+              </div>
+
+              <p className="text-[11px] text-emerald-300/70 italic pt-1 border-t border-emerald-800/40 leading-relaxed">
+                Calculado usando la columna &quot;precioReventa&quot; de los productos seleccionados. Este cálculo se mostrará automáticamente al cliente salón en el catálogo.
+              </p>
+            </div>
+          )}
 
           {/* Card de Configuración de Estado y Vigencia */}
           <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm space-y-5">

@@ -54,6 +54,8 @@ export default async function AdminEditarPackPage({ params }: PageProps) {
     categoria: p.categoria,
     presentacion: p.presentacion,
     precioPss: Number(p.precioPss),
+    precioEcommerce: Number(p.precioEcommerce),
+    precioReventa: p.precioReventa ? Number(p.precioReventa) : null,
     stock: p.stock,
     activo: p.activo,
     imagen: p.imagen,

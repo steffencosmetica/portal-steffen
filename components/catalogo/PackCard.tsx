@@ -16,6 +16,7 @@ export interface PackItemDTO {
   imagen?: string | null;
   precioUnitario?: number | null;
   precioEcommerce?: number | null;
+  precioReventa?: number | null;
 }
 
 export interface PackDTO {

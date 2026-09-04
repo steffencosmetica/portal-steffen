@@ -45,6 +45,7 @@ export interface ProductoFormData {
   presentacion: string;
   precioPss: number | string;
   precioEcommerce: number | string;
+  precioReventa?: number | string | null;
   stock: number | string;
   variantes?: string | null;
   ordenVisualizacion: number | string;
@@ -87,6 +88,11 @@ export function ProductoForm({ productoInicial, modo }: ProductoFormProps) {
   );
   const [precioEcommerce, setPrecioEcommerce] = useState<string>(
     productoInicial?.precioEcommerce !== undefined ? String(productoInicial.precioEcommerce) : ''
+  );
+  const [precioReventa, setPrecioReventa] = useState<string>(
+    productoInicial?.precioReventa !== undefined && productoInicial?.precioReventa !== null
+      ? String(productoInicial.precioReventa)
+      : ''
   );
   const [stock, setStock] = useState<string>(
     productoInicial?.stock !== undefined ? String(productoInicial.stock) : '0'
@@ -302,6 +308,7 @@ export function ProductoForm({ productoInicial, modo }: ProductoFormProps) {
       presentacion: presentacion.trim(),
       precioPss: precioNum,
       precioEcommerce: precioEcomNum,
+      precioReventa: precioReventa.trim() !== '' ? Number(precioReventa) : null,
       stock: Math.floor(stockNum),
       variantes: serializarVariantes(variantesLimpias),
       ordenVisualizacion: isNaN(ordenNum) ? 0 : Math.max(0, Math.floor(ordenNum)),
@@ -652,6 +659,30 @@ export function ProductoForm({ productoInicial, modo }: ProductoFormProps) {
                   className="w-full bg-white border border-neutral-300 rounded-xl px-4 py-2.5 text-sm text-neutral-900 font-mono font-bold focus:outline-none focus:border-gold-500 focus:ring-1 focus:ring-gold-500 transition-colors"
                 />
                 <span className="text-[11px] text-neutral-400 block">Precio de referencia para clientes no activos / público</span>
+              </div>
+
+              {/* Campo especial: Precio Reventa */}
+              <div className="space-y-1.5 sm:col-span-2 bg-emerald-50/50 border border-emerald-200/80 rounded-xl p-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="block text-xs font-semibold text-neutral-800">
+                    Precio Sugerido Reventa ($ ARS) <span className="text-neutral-400 font-normal">(Opcional)</span>
+                  </label>
+                  <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    Uso exclusivo para Packs &quot;Reventa&quot;
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={precioReventa}
+                  onChange={(e) => setPrecioReventa(e.target.value)}
+                  placeholder="Ej: 21500 (si se deja vacío, tomará el precio público de referencia)"
+                  className="w-full bg-white border border-emerald-300 rounded-xl px-4 py-2.5 text-sm text-emerald-900 font-mono font-bold focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 transition-colors"
+                />
+                <p className="text-[11px] text-neutral-500">
+                  Este precio no es visible ni utilizado en el catálogo habitual; se usa como precio sugerido de reventa al calcular la facturación y ganancia potencial en los packs que llevan la etiqueta <strong>&quot;Reventa&quot;</strong>.
+                </p>
               </div>
             </div>
 

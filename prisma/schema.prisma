@@ -178,6 +178,7 @@ model Producto {
   rendimientoSalon    String?     @db.Text // Rendimiento o rentabilidad estimada para el profesional en salón
   precioPss           Decimal     @db.Decimal(10, 2) // Precio Sugerido Salón (referencia visible)
   precioEcommerce     Decimal     @default(0) @db.Decimal(10, 2) // Precio público de referencia, cargado por el admin
+  precioReventa       Decimal?    @db.Decimal(10, 2) // Precio sugerido de reventa para el armado y cálculo de packs "Reventa"
   stock               Int         @default(0)
   variantes           String?     @db.Text // JSON con array de variantes: [{nombre, precioPss?, precioEcommerce?, stock?}]
   etiqueta            String?     // Etiqueta de tipo de producto o combo
