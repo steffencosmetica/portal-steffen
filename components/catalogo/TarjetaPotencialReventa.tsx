@@ -175,10 +175,18 @@ export function TarjetaPotencialReventa({
                     <span className="text-neutral-500 text-[10px]">
                       {it.presentacion ? `${it.presentacion} • ` : ''}
                       <strong className="text-emerald-800">x{it.cantidad} unid.</strong>
+                      {it.esExhibidora && it.unidadesPorCaja ? (
+                        <span className="text-emerald-700 font-medium"> ({it.unidadesPorCaja * it.cantidad} u. reventa)</span>
+                      ) : null}
                     </span>
                   </div>
                   <div className="col-span-3 text-right font-medium text-neutral-700">
-                    {formatoMoneda.format(it.precioEcommerceUnitario)}
+                    <div>{formatoMoneda.format(it.precioEcommerceUnitario)}</div>
+                    {it.esExhibidora && (
+                      <span className="text-[9px] text-neutral-400 block font-normal leading-tight">
+                        c/u
+                      </span>
+                    )}
                   </div>
                   <div className="col-span-3 text-right font-bold text-neutral-900">
                     {formatoMoneda.format(it.subtotalEcommerce)}

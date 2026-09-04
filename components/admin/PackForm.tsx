@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { guardarPackAction, PackItemInput } from '@/app/actions/admin/packs';
 import { ETIQUETAS_PACK, ETIQUETAS_PACK_CONFIG, EtiquetaPack } from '@/lib/constants/packs';
+import { obtenerUnidadesExhibidora } from '@/lib/services/reventa';
 import {
   Package,
   Plus,
@@ -608,6 +609,12 @@ export function PackForm({ packInicial, productosDisponibles }: PackFormProps) {
                                 <span>•</span>
                                 <span className="text-emerald-700 font-semibold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
                                   Reventa sug: {formatoMoneda.format(prod.precioReventa)}
+                                  {(() => {
+                                    const u = obtenerUnidadesExhibidora(prod.nombre, prod.presentacion);
+                                    return u && u > 1
+                                      ? ` (${formatoMoneda.format(Math.round(prod.precioReventa / u))} c/u)`
+                                      : '';
+                                  })()}
                                 </span>
                               </>
                             ) : null}

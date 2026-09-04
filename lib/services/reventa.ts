@@ -7,6 +7,8 @@ export interface DetalleItemReventa {
   cantidad: number;
   precioEcommerceUnitario: number;
   subtotalEcommerce: number;
+  esExhibidora?: boolean;
+  unidadesPorCaja?: number | null;
 }
 
 export interface PotencialReventaResultado {
@@ -17,6 +19,54 @@ export interface PotencialReventaResultado {
   porcentajeGanancia: number; // Retorno sobre la inversión (ROI): (ganancia / inversion) * 100
   margenSobreVenta: number;   // Margen sobre la facturación: (ganancia / facturacion) * 100
   items: DetalleItemReventa[];
+}
+
+/**
+ * Detecta si un producto corresponde a una caja exhibidora y devuelve
+ * la cantidad de unidades individuales que contiene para la reventa en salón:
+ * - Emulsión Triple Acción -> 12 unidades
+ * - Máscara Capilar -> 36 unidades
+ */
+export function obtenerUnidadesExhibidora(
+  nombre: string | null | undefined,
+  presentacion?: string | null | undefined
+): number | null {
+  const texto = `${nombre || ''} ${presentacion || ''}`.toLowerCase();
+  const esExhibidora = texto.includes('exhibidora') || texto.includes('caja exhibidora');
+
+  if (!esExhibidora) {
+    return null;
+  }
+
+  // 1. Emulsión Triple Acción (12 unidades)
+  if (
+    texto.includes('triple acci') ||
+    texto.includes('emulsion') ||
+    texto.includes('emulsión') ||
+    texto.includes('12u') ||
+    texto.includes('12 u')
+  ) {
+    return 12;
+  }
+
+  // 2. Máscara Capilar (36 unidades)
+  if (
+    texto.includes('mascara') ||
+    texto.includes('máscara') ||
+    texto.includes('36u') ||
+    texto.includes('36 u')
+  ) {
+    return 36;
+  }
+
+  // Patrón genérico por si existe otra presentación con unidades explícitas
+  const match = texto.match(/(\d+)\s*u(?:nid)?\b/);
+  if (match) {
+    const parsed = parseInt(match[1], 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+
+  return null;
 }
 
 /**
@@ -97,13 +147,25 @@ export function calcularPotencialReventa(pack: {
     const subtotalItem = pSugerido * it.cantidad;
     facturacionTotal += subtotalItem;
 
+    const unidadesCaja = obtenerUnidadesExhibidora(it.nombre, it.presentacion);
+    const esExhibidora = unidadesCaja !== null && unidadesCaja > 1;
+
+    // En las cajas exhibidoras, el precio unitario sugerido al público se divide
+    // por la cantidad de unidades que tiene la caja para reflejar el valor individual
+    // de reventa en el salón (ej: 36 unidades para Máscaras, 12 para Triple Acción).
+    const precioUnitarioSugerido = esExhibidora && unidadesCaja
+      ? Math.round((pSugerido / unidadesCaja) * 100) / 100
+      : pSugerido;
+
     itemsDetalle.push({
       productoId: it.productoId,
       nombre: it.nombre,
       presentacion: it.presentacion,
       cantidad: it.cantidad,
-      precioEcommerceUnitario: pSugerido,
+      precioEcommerceUnitario: precioUnitarioSugerido,
       subtotalEcommerce: subtotalItem,
+      esExhibidora,
+      unidadesPorCaja: unidadesCaja,
     });
   }
 
