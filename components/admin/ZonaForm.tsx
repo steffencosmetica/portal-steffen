@@ -291,7 +291,7 @@ export function ZonaForm({ zonaInicial, distribuidoresActivos }: ZonaFormProps) 
                 <div className="flex items-start gap-2">
                   <Info className="w-4 h-4 text-neutral-400 shrink-0 mt-0.5" />
                   <p>
-                    Podés seleccionar la provincia y escribir la localidad manualmente. Si querés habilitar cálculo por proximidad (50 km), podés autocompletar con el buscador o pulsar "Detectar GPS".
+                    Podés seleccionar la provincia y escribir la localidad manualmente. Si querés habilitar cálculo por proximidad (10 km), podés autocompletar con el buscador o pulsar "Detectar GPS".
                   </p>
                 </div>
                 {localidad.trim() && (

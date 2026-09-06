@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { Rol, EstadoZona } from '@prisma/client';
+import { recalcularAsignacionesZonas, RADIO_MAXIMO_KM } from '@/lib/services/geolocalizacion';
 
 export interface GuardarZonaData {
   provincia: string;
@@ -108,6 +109,8 @@ export async function guardarZonaAction(
     const latitud = typeof data.latitud === 'number' && !isNaN(data.latitud) ? data.latitud : null;
     const longitud = typeof data.longitud === 'number' && !isNaN(data.longitud) ? data.longitud : null;
 
+    let zonaFinalId: string;
+
     // 6. Inserción o actualización
     if (id) {
       const existe = await prisma.zona.findUnique({
@@ -130,16 +133,7 @@ export async function guardarZonaAction(
         },
       });
 
-      revalidatePath('/admin/zonas');
-      revalidatePath(`/admin/zonas/${id}`);
-      revalidatePath('/admin/distribuidores');
-      revalidatePath('/admin/clientes');
-      revalidatePath('/admin');
-
-      return {
-        success: true,
-        zonaId: actualizada.id,
-      };
+      zonaFinalId = actualizada.id;
     } else {
       const nueva = await prisma.zona.create({
         data: {
@@ -152,21 +146,85 @@ export async function guardarZonaAction(
         },
       });
 
-      revalidatePath('/admin/zonas');
-      revalidatePath('/admin/distribuidores');
-      revalidatePath('/admin/clientes');
-      revalidatePath('/admin');
-
-      return {
-        success: true,
-        zonaId: nueva.id,
-      };
+      zonaFinalId = nueva.id;
     }
+
+    // Si la zona tiene GPS, sincronizar salones dentro del radio de 10 km
+    if (latitud !== null && longitud !== null) {
+      try {
+        await recalcularAsignacionesZonas(RADIO_MAXIMO_KM);
+      } catch (errSync) {
+        console.warn('Advertencia al sincronizar salones de la zona:', errSync);
+      }
+    }
+
+    revalidatePath('/admin/zonas');
+    revalidatePath(`/admin/zonas/${zonaFinalId}`);
+    revalidatePath('/admin/distribuidores');
+    revalidatePath('/admin/clientes');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      zonaId: zonaFinalId,
+    };
   } catch (error) {
     console.error('Error al guardar zona:', error);
     return {
       success: false,
       error: 'Ocurrió un error inesperado al guardar la zona.',
+    };
+  }
+}
+
+/**
+ * Recalcula las asignaciones de salones a zonas geográficas según el radio de 10 km.
+ */
+export interface RecalcularZonasResultado {
+  success: boolean;
+  totalClientes?: number;
+  reasignados?: number;
+  asignadosPorGps?: number;
+  sinCambios?: number;
+  radioKm?: number;
+  error?: string;
+}
+
+export async function recalcularZonasAction(): Promise<RecalcularZonasResultado> {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: 'No autorizado. Debes iniciar sesión.' };
+    }
+
+    const usuario = await prisma.usuario.findUnique({
+      where: { authUserId: user.id },
+    });
+
+    if (!usuario || usuario.rol !== Rol.ADMIN) {
+      return { success: false, error: 'Permisos insuficientes. Se requiere rol de Administrador.' };
+    }
+
+    const resultado = await recalcularAsignacionesZonas(RADIO_MAXIMO_KM);
+
+    revalidatePath('/admin/zonas');
+    revalidatePath('/admin/distribuidores');
+    revalidatePath('/admin/clientes');
+    revalidatePath('/admin');
+
+    return {
+      success: true,
+      ...resultado,
+    };
+  } catch (error) {
+    console.error('Error al recalcular zonas:', error);
+    return {
+      success: false,
+      error: 'Ocurrió un error al recalcular asignaciones de zonas.',
     };
   }
 }

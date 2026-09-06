@@ -4,7 +4,7 @@ import React, { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { EstadoZona } from '@prisma/client';
-import { eliminarZonaAction } from '@/app/actions/admin/zonas';
+import { eliminarZonaAction, recalcularZonasAction } from '@/app/actions/admin/zonas';
 import { 
   Search, 
   X, 
@@ -20,7 +20,8 @@ import {
   CheckCircle,
   Clock,
   ShieldAlert,
-  Navigation
+  Navigation,
+  RotateCw
 } from 'lucide-react';
 
 export interface ZonaListItemDTO {
@@ -78,10 +79,35 @@ export function ZonasListClient({ zonasIniciales }: ZonasListClientProps) {
   const [busqueda, setBusqueda] = useState<string>('');
   const [filtroEstado, setFiltroEstado] = useState<string>('TODOS');
   
-  // Modal de eliminación
+  // Modal de eliminación y estado de recálculo
   const [zonaAEliminar, setZonaAEliminar] = useState<ZonaListItemDTO | null>(null);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null);
+  const [recalculando, setRecalculando] = useState<boolean>(false);
   const [isPending, startTransition] = useTransition();
+
+  // Recalcular asignaciones por radio de 10 km
+  const handleRecalcularZonas = async () => {
+    setMensajeError(null);
+    setMensajeExito(null);
+    setRecalculando(true);
+    try {
+      const res = await recalcularZonasAction();
+      if (res.success) {
+        setMensajeExito(
+          `¡Cálculo de 10 km completado! Se analizaron ${res.totalClientes || 0} salones (${res.reasignados || 0} actualizados, ${res.asignadosPorGps || 0} con cobertura por radio GPS ≤ 10 km).`
+        );
+        router.refresh();
+      } else {
+        setMensajeError(res.error || 'No se pudo recalcular la asignación de zonas.');
+      }
+    } catch (err) {
+      console.error(err);
+      setMensajeError('Error inesperado al recalcular zonas.');
+    } finally {
+      setRecalculando(false);
+    }
+  };
 
   // Filtrado
   const zonasFiltradas = zonas.filter((z) => {
@@ -145,15 +171,49 @@ export function ZonasListClient({ zonasIniciales }: ZonasListClientProps) {
             )}
           </div>
 
-          {/* Botón Nueva Zona */}
-          <Link
-            href="/admin/zonas/nuevo"
-            className="inline-flex items-center justify-center gap-2 bg-gold-500 hover:bg-gold-600 text-white font-bold text-sm px-4 py-2 rounded-xl transition-all shadow-sm shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Nueva Zona</span>
-          </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Botón Recalcular por Proximidad 10km */}
+            <button
+              type="button"
+              onClick={handleRecalcularZonas}
+              disabled={recalculando}
+              className="inline-flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-800 disabled:bg-neutral-400 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-xl transition-all shadow-sm cursor-pointer disabled:cursor-not-allowed"
+              title="Recalcular asignación de salones a zonas según radio de 10 km"
+            >
+              {recalculando ? (
+                <Loader2 className="w-4 h-4 animate-spin text-gold-400" />
+              ) : (
+                <RotateCw className="w-4 h-4 text-gold-400" />
+              )}
+              <span>{recalculando ? 'Calculando...' : 'Recalcular Salones (10 km)'}</span>
+            </button>
+
+            {/* Botón Nueva Zona */}
+            <Link
+              href="/admin/zonas/nuevo"
+              className="inline-flex items-center justify-center gap-2 bg-gold-500 hover:bg-gold-600 text-white font-bold text-xs sm:text-sm px-4 py-2 rounded-xl transition-all shadow-sm shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nueva Zona</span>
+            </Link>
+          </div>
         </div>
+
+        {/* Mensaje de Éxito de Recálculo */}
+        {mensajeExito && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center justify-between gap-2 animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{mensajeExito}</span>
+            </div>
+            <button
+              onClick={() => setMensajeExito(null)}
+              className="text-emerald-500 hover:text-emerald-700 p-0.5 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* Filtros de Estado */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 border-t border-neutral-100 text-xs">

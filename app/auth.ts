@@ -99,7 +99,7 @@ export async function registroProfesionalAction(
     // 2. Transacción en Prisma para crear Usuario y Cliente
     try {
       // Determinar la zona asignada:
-      // A) Si se aportaron coordenadas, buscar únicamente por cercanía geográfica (radio <= 50 km)
+      // A) Si se aportaron coordenadas, buscar únicamente por cercanía geográfica (radio <= 10 km)
       const coordenadasProvistas = latitud !== null && longitud !== null;
       let zonaAsignadaId: string | null = null;
 
