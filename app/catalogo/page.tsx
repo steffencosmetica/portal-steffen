@@ -14,7 +14,7 @@ import { calcularDisponibilidadPack, obtenerPrecioPackParaCliente } from '@/lib/
 import { NivelClienteCard } from '@/components/NivelClienteCard';
 import { AlertaCuentaAprobadaModal } from '@/components/AlertaCuentaAprobadaModal';
 import { PRODUCTOS_REALES_STEFFEN } from '@/lib/constants/productos-reales-steffen';
-import { ShieldAlert, Truck, ShoppingBag } from 'lucide-react';
+import { ShieldAlert, Truck, ShoppingBag, FileDown } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -253,16 +253,35 @@ export default async function CatalogoPage() {
         )}
 
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h1 className="text-2xl md:text-3xl font-bold text-neutral-900 tracking-tight">
-              Catálogo de Cosmética Capilar
-            </h1>
-            {estadoCliente && estadoCliente !== 'ACTIVO' && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
-                Cuenta {estadoCliente === 'PENDIENTE_APROBACION' ? 'Pendiente de Aprobación' : 'Inactiva'}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl md:text-3xl font-bold text-neutral-900 tracking-tight">
+                Catálogo de Cosmética Capilar
+              </h1>
+              {estadoCliente && estadoCliente !== 'ACTIVO' && (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+                  Cuenta {estadoCliente === 'PENDIENTE_APROBACION' ? 'Pendiente de Aprobación' : 'Inactiva'}
+                </span>
+              )}
+            </div>
+
+            {/* Botón Descargar Catálogo en PDF */}
+            <a
+              id="btn-descargar-catalogo-pdf"
+              href={process.env.NEXT_PUBLIC_CATALOGO_PDF_URL || '/catalogo-steffen.pdf'}
+              download="Catalogo-Steffen-Cosmetica.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 bg-white hover:bg-neutral-50 active:bg-neutral-100 text-neutral-800 hover:text-gold-700 border border-neutral-300 hover:border-gold-400 font-semibold text-xs sm:text-sm px-4 py-2 rounded-xl shadow-xs transition-all duration-150 group shrink-0 self-start sm:self-auto cursor-pointer"
+              title="Descargar catálogo oficial de Steffen en formato PDF"
+            >
+              <span className="w-5 h-5 rounded-md bg-red-50 text-red-600 flex items-center justify-center font-black text-[9px] border border-red-200/80 group-hover:scale-105 transition-transform">
+                PDF
               </span>
-            )}
+              <span>Descargar Catálogo en PDF</span>
+              <FileDown className="w-4 h-4 text-neutral-400 group-hover:text-gold-600 group-hover:translate-y-0.5 transition-all" />
+            </a>
           </div>
           <p className="text-neutral-500 text-sm">
             {esActivo
