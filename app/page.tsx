@@ -83,7 +83,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       icono: Layers,
     },
     {
-      titulo: 'Compra mínima accesible',
+      titulo: 'Sin compra mínima',
       descripcion: 'Condiciones pensadas para adaptarse a la rotación real de tu salón.',
       icono: ShoppingBag,
     },
