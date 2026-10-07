@@ -49,7 +49,7 @@ export async function registroProfesionalAction(
     const yaComproSteffen = formData.get('yaComproSteffen') === 'true';
     const comoConocioSteffen = (formData.get('comoConocioSteffen') as string)?.trim() || null;
 
-    // Coordenadas geográficas opcionales (desde Google Places Autocomplete)
+    // Coordenadas geográficas opcionales (si se proporcionan)
     const latitudRaw = (formData.get('latitud') as string)?.trim();
     const longitudRaw = (formData.get('longitud') as string)?.trim();
     const latitud = latitudRaw && !isNaN(parseFloat(latitudRaw)) ? parseFloat(latitudRaw) : null;
@@ -57,7 +57,7 @@ export async function registroProfesionalAction(
 
     // Validaciones básicas de campos requeridos
     if (!provincia || !localidad) {
-      return { error: 'Por favor seleccioná tu dirección en el buscador de Google Maps para autocompletar la provincia y localidad de tu salón.' };
+      return { error: 'Por favor completá la provincia y la localidad de tu salón.' };
     }
 
     if (!email || !password || !nombre || !apellido || !salon || !whatsapp || !tipoDeNegocio) {
