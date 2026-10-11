@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev -p 3001",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint .",
@@ -40,8 +40,10 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@tailwindcss/oxide-win32-x64-msvc": "^4.1.11",
     "eslint": "9.39.1",
     "eslint-config-next": "15.4.9",
-    "firebase-tools": "^15.0.0"
+    "firebase-tools": "^15.0.0",
+    "lightningcss-win32-x64-msvc": "^1.33.0"
   }
 }
