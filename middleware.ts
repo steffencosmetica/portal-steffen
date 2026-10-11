@@ -42,8 +42,9 @@ export async function middleware(request: NextRequest) {
   const isProtectedAppRoute = pathname.startsWith('/perfil');
   const isAdminRoute = pathname.startsWith('/admin');
 
-  const userRol = (user?.app_metadata?.rol || user?.user_metadata?.rol) as string | undefined;
-  const estadoCliente = (user?.app_metadata?.estadoCliente || user?.user_metadata?.estadoCliente) as string | undefined;
+  // Solo confiar en app_metadata (emitido por el servidor con Service Role), nunca en user_metadata manipulable
+  const userRol = user?.app_metadata?.rol as string | undefined;
+  const estadoCliente = user?.app_metadata?.estadoCliente as string | undefined;
 
   // 0. Si el usuario está autenticado pero su cuenta está BLOQUEADA
   if (user && estadoCliente === 'BLOQUEADO') {
@@ -63,11 +64,24 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // 1.1 Si el usuario está autenticado pero intenta entrar a /admin sin rol ADMIN en app_metadata
+  if (user && isAdminRoute && userRol !== 'ADMIN') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/catalogo';
+    return NextResponse.redirect(url);
+  }
+
   // 2. Si ya está autenticado e intenta ir a login o registro con sesión activa
   if (user && (pathname === '/login' || pathname === '/registro')) {
     // Si viene con redirect param, respetar el redirect
     const redirectParam = request.nextUrl.searchParams.get('redirect');
     if (redirectParam && redirectParam.startsWith('/')) {
+      // Si el redirect es hacia admin pero el usuario no es ADMIN, redirigir al catálogo
+      if (redirectParam.startsWith('/admin') && userRol !== 'ADMIN') {
+        const url = request.nextUrl.clone();
+        url.pathname = '/catalogo';
+        return NextResponse.redirect(url);
+      }
       const url = request.nextUrl.clone();
       url.pathname = redirectParam;
       url.searchParams.delete('redirect');
