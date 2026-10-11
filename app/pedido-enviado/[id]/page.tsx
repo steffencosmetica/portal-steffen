@@ -15,8 +15,10 @@ import {
   Clock, 
   Percent,
   ExternalLink,
-  AlertCircle
+  AlertCircle,
+  ShieldAlert
 } from 'lucide-react';
+import { verifyGuestOrderCookieFromRequest } from '@/lib/security/guestOrderAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -147,16 +149,101 @@ export default async function PedidoEnviadoPage({ params }: PedidoEnviadoPagePro
     notFound();
   }
 
-  // 4. Regla de acceso: Permitir si es admin, el propio cliente dueño, o un pedido de invitado
+  // 4. Regla de acceso: Permitir si es admin, el propio cliente dueño, o un pedido de invitado con token válido
   const esAdmin = usuario?.rol === 'ADMIN';
-  const esPropietario = usuario?.cliente && pedido.clienteId === usuario.cliente.id;
+  const esPropietario = Boolean(usuario?.cliente && pedido.clienteId === usuario.cliente.id);
   const esPedidoInvitado = pedido.cliente?.email === 'invitado@steffen.com';
 
-  if (!esAdmin && !esPropietario && !esPedidoInvitado) {
-    if (!user) {
-      redirect('/login');
+  if (!esAdmin && !esPropietario) {
+    if (!esPedidoInvitado) {
+      if (!user) {
+        redirect('/login');
+      }
+      notFound();
     }
-    notFound();
+
+    // Si es un pedido de invitado, verificar la cookie HttpOnly firmada con HMAC-SHA256
+    const guestAuth = await verifyGuestOrderCookieFromRequest(pedidoId);
+    if (!guestAuth.authorized) {
+      const whatsappSoporteUrl = generarUrlWhatsapp(
+        '¡Hola Steffen Cosmética Capilar! Me contacto para consultar sobre un pedido realizado desde la web.'
+      );
+
+      return (
+        <div id="pedido-no-autorizado-root" className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col justify-between p-4 md:p-8">
+          <SiteHeader
+            salonNombre={usuario?.cliente?.salon || ''}
+            usuarioId={usuario?.id || ''}
+            sesion={!!user}
+            paginaActual="otro"
+            mostrarInicio={true}
+            mostrarCatalogo={true}
+            mostrarCarrito={false}
+          />
+
+          <main className="max-w-2xl mx-auto w-full py-12 space-y-6">
+            <div className="bg-white border border-neutral-200 rounded-3xl p-6 md:p-10 text-center space-y-5 shadow-sm">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 shadow-sm">
+                <ShieldAlert className="w-9 h-9" />
+              </div>
+
+              <div className="space-y-2">
+                <span className="inline-block px-3 py-1 text-xs font-bold uppercase tracking-widest bg-amber-50 text-amber-800 border border-amber-300 rounded-full">
+                  Acceso no disponible o expirado
+                </span>
+                <h1 className="text-2xl md:text-3xl font-extrabold text-neutral-900 tracking-tight">
+                  No es posible visualizar este pedido
+                </h1>
+                <p className="text-neutral-600 text-sm max-w-lg mx-auto leading-relaxed">
+                  Por razones de seguridad y privacidad, los pedidos realizados por invitados solo pueden consultarse desde el navegador del dispositivo donde se realizó la compra y durante un lapso de 2 horas.
+                </p>
+                <p className="text-neutral-500 text-xs max-w-md mx-auto leading-relaxed">
+                  Si realizaste este pedido recientemente o necesitás coordinar el pago y envío de tus productos, por favor comunicate directamente con nuestro equipo de atención oficial.
+                </p>
+              </div>
+
+              <div className="pt-3 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <a
+                  href={whatsappSoporteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  id="btn-contactar-soporte-whatsapp"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-sm transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
+                >
+                  <MessageSquare className="w-4 h-4 fill-white" />
+                  <span>Contactar a Steffen por WhatsApp</span>
+                  <ExternalLink className="w-3.5 h-3.5 stroke-[2.5]" />
+                </a>
+
+                <Link
+                  href="/catalogo"
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-semibold text-sm transition-colors cursor-pointer border border-neutral-300"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Volver al Catálogo</span>
+                </Link>
+              </div>
+
+              {!user && (
+                <div className="pt-4 border-t border-neutral-100 text-center">
+                  <p className="text-xs text-neutral-500">
+                    ¿Sos un profesional registrado?{' '}
+                    <Link href="/login" className="text-gold-600 hover:text-gold-700 font-bold underline">
+                      Iniciá sesión aquí
+                    </Link>{' '}
+                    para ver tu historial completo de compras.
+                  </p>
+                </div>
+              )}
+            </div>
+          </main>
+
+          <footer className="max-w-4xl mx-auto w-full py-4 text-center text-xs text-neutral-500 border-t border-neutral-200">
+            © {new Date().getFullYear()} Steffen Cosmética Capilar • Portal Profesional
+          </footer>
+        </div>
+      );
+    }
   }
 
   const cliente = usuario?.cliente || pedido.cliente;

@@ -9,6 +9,7 @@ import { obtenerNumeroWhatsappOFallar, generarUrlWhatsapp, ConfiguracionWhatsapp
 import { EstadoCliente, EstadoPedido } from '@prisma/client';
 import { TipoItemCarrito } from '@/lib/types/carrito';
 import { parsearVariantes, obtenerPreciosEfectivosProducto } from '@/lib/utils/variantes';
+import { setGuestOrderAuthCookie } from '@/lib/security/guestOrderAuth';
 
 export interface ConfirmarPedidoItemInput {
   id: string;
@@ -503,6 +504,15 @@ export async function confirmarPedidoAction(
     }
 
     if (pedidoGuardado) {
+      // Para pedidos realizados sin sesión de cliente profesional, establecer cookie HttpOnly firmada
+      if (!cliente && pedidoGuardado.id) {
+        try {
+          await setGuestOrderAuthCookie(pedidoGuardado.id);
+        } catch (cookieErr) {
+          console.warn('No se pudo establecer la cookie de autorización de invitado:', cookieErr);
+        }
+      }
+
       const whatsappUrl = generarUrlWhatsapp(pedidoGuardado.mensajeWhatsappGenerado || '', numeroWhatsapp);
       return {
         success: true,
