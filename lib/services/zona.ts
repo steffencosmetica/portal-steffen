@@ -1,3 +1,5 @@
+import { EstadoZona } from '@prisma/client';
+
 export type EstadoZonaType = 'SIN_DISTRIBUIDOR' | 'COBERTURA_PARCIAL' | 'CON_DISTRIBUIDOR';
 
 export interface EvaluacionZonaResult {
@@ -5,6 +7,56 @@ export interface EvaluacionZonaResult {
   permiteCompraDirectaFabrica: boolean;
   requiereContactoDistribuidor: boolean;
   mensajeInformativo: string;
+}
+
+export interface ClienteZonaLike {
+  zona?: {
+    id?: string | null;
+    estado?: EstadoZona | string | null;
+    distribuidorId?: string | null;
+    distribuidor?: {
+      id?: string | null;
+      estado?: string | null;
+      nombre?: string | null;
+      empresa?: string | null;
+      whatsapp?: string | null;
+    } | null;
+  } | null;
+}
+
+/**
+ * Determina de forma centralizada si un cliente cuenta con un distribuidor oficial activo asignado a su zona.
+ * 
+ * Reglas Comerciales:
+ * - Requiere que el cliente tenga una zona configurada.
+ * - La zona debe estar en estado 'CON_DISTRIBUIDOR' y contar con un distribuidor asignado.
+ * - Si el objeto distribuidor está precargado, su estado debe ser estrictamente 'ACTIVO'.
+ * - Zonas sin distribuidor, zonas sin cobertura, o zonas con distribuidor inactivo se consideran venta directa de fábrica.
+ */
+export function tieneDistribuidorActivo(
+  cliente: ClienteZonaLike | null | undefined
+): boolean {
+  if (!cliente || !cliente.zona) {
+    return false;
+  }
+
+  const { zona } = cliente;
+
+  // Si la zona fue marcada explícitamente como SIN_DISTRIBUIDOR, es venta directa
+  if (zona.estado === 'SIN_DISTRIBUIDOR' || zona.estado === EstadoZona.SIN_DISTRIBUIDOR) {
+    return false;
+  }
+
+  // Si tiene el objeto distribuidor cargado, verificar que su estado sea estrictamente ACTIVO
+  if (zona.distribuidor) {
+    return zona.distribuidor.estado === 'ACTIVO';
+  }
+
+  // Si no tiene el objeto distribuidor expandido pero tiene distribuidorId y estado CON_DISTRIBUIDOR
+  return Boolean(
+    zona.distribuidorId &&
+    (zona.estado === 'CON_DISTRIBUIDOR' || zona.estado === EstadoZona.CON_DISTRIBUIDOR)
+  );
 }
 
 /**

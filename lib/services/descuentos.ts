@@ -4,7 +4,8 @@
 // 2. Los porcentajes y tramos se obtienen de la tabla 'ReglaDeDescuento' (PostgreSQL vía Prisma), nunca hardcodeados.
 
 import { prisma } from '@/lib/prisma';
-import { TipoDescuento, EstadoPedido, EstadoZona } from '@prisma/client';
+import { TipoDescuento, EstadoPedido, EstadoCliente } from '@prisma/client';
+import { tieneDistribuidorActivo } from '@/lib/services/zona';
 
 export interface CalculoDescuentoResultado {
   tipoAplicado: TipoDescuento | 'SIN_DESCUENTO';
@@ -85,14 +86,18 @@ export async function inicializarReglasSiEstanVacias() {
  * días transcurridos desde su última compra completada, zona geográfica y la tabla ReglaDeDescuento.
  *
  * @param clienteId ID del cliente (obtenido de forma segura desde la sesión en el servidor)
- * @param subtotalPss Subtotal PSS de los productos vigentes
+ * @param subtotalPss Subtotal de los productos vigentes
  * @param clientePreCargado Opcional: objeto cliente previamente recuperado para evitar consultas redundantes
+ * @param prismaClient Opcional: instancia o cliente de transacción de Prisma para consultas atómicas
  */
 export async function calcularDescuentoParaCliente(
   clienteId: string,
   subtotalPss: number,
-  clientePreCargado?: any
+  clientePreCargado?: any,
+  prismaClient?: any
 ): Promise<CalculoDescuentoResultado> {
+  const db = prismaClient || prisma;
+
   // Retorno seguro por defecto ante cualquier inconsistencia
   const resultadoVacio: CalculoDescuentoResultado = {
     tipoAplicado: 'SIN_DESCUENTO',
@@ -114,11 +119,19 @@ export async function calcularDescuentoParaCliente(
       await inicializarReglasSiEstanVacias();
     }
 
-    // 1. Obtener cliente con su zona (o reutilizar si ya fue provisto)
-    const cliente = clientePreCargado || (await prisma.cliente.findUnique({
-      where: { id: clienteId },
-      include: { zona: true },
-    }));
+    // 1. Obtener cliente con su zona y distribuidor (o reutilizar si ya fue provisto)
+    const cliente =
+      clientePreCargado ||
+      (await db.cliente.findUnique({
+        where: { id: clienteId },
+        include: {
+          zona: {
+            include: {
+              distribuidor: true,
+            },
+          },
+        },
+      }));
 
     if (!cliente) {
       console.warn(`Cliente con ID ${clienteId} no encontrado al calcular descuentos.`);
@@ -126,7 +139,7 @@ export async function calcularDescuentoParaCliente(
     }
 
     // 2. Contar pedidos confirmados previos (excluyendo CARRITO y CANCELADO)
-    const pedidosEfectivosCount = await prisma.pedido.count({
+    const pedidosEfectivosCount = await db.pedido.count({
       where: {
         clienteId: cliente.id,
         estado: {
@@ -137,9 +150,10 @@ export async function calcularDescuentoParaCliente(
 
     let reglaSeleccionada = null;
 
-    // Regla 1: Si no tiene ningún pedido efectivo previo -> Aplica PRIMER_PEDIDO (20%), sin chequear zona ni estado de aprobación
+    // Regla 1: Descuento de bienvenida / primera compra.
+    // Aplica a TODOS los usuarios registrados (PENDIENTE_APROBACION o ACTIVO) en su primer pedido efectivo.
     if (pedidosEfectivosCount === 0) {
-      reglaSeleccionada = await prisma.reglaDeDescuento.findFirst({
+      reglaSeleccionada = await db.reglaDeDescuento.findFirst({
         where: {
           tipo: TipoDescuento.PRIMER_PEDIDO,
           activa: true,
@@ -151,15 +165,25 @@ export async function calcularDescuentoParaCliente(
         return resultadoVacio;
       }
     } else {
-      // Regla 2: Si no es primer pedido, chequear zona sin distribuidor
-      const esZonaDirecta = !cliente.zona || cliente.zona.estado === EstadoZona.SIN_DISTRIBUIDOR;
-      if (!esZonaDirecta) {
-        // Tiene zona con distribuidor -> SIN_DESCUENTO inmediatamente
+      // Regla 2: Descuentos de reposición.
+      // Corresponden EXCLUSIVAMENTE a salones con cuenta profesional aprobada (ACTIVO).
+      // Clientes PENDIENTE_APROBACION o INACTIVO no reciben reposición.
+      const esClienteActivo =
+        cliente.estadoCliente === EstadoCliente.ACTIVO ||
+        (cliente.estadoCliente as string) === 'ACTIVO';
+
+      if (!esClienteActivo) {
         return resultadoVacio;
       }
 
-      // Regla 3: Si es elegible por zona, buscar el pedido más reciente COMPLETADO
-      const ultimoPedidoCompletado = await prisma.pedido.findFirst({
+      // Regla 3: Si es cliente ACTIVO, verificar que no tenga distribuidor oficial activo asignado
+      if (tieneDistribuidorActivo(cliente)) {
+        // Tiene distribuidor oficial activo -> SIN_DESCUENTO de reposición
+        return resultadoVacio;
+      }
+
+      // Regla 4: Si es elegible por zona y cuenta activa, buscar el pedido más reciente COMPLETADO
+      const ultimoPedidoCompletado = await db.pedido.findFirst({
         where: {
           clienteId: cliente.id,
           estado: EstadoPedido.COMPLETADO,
@@ -184,7 +208,7 @@ export async function calcularDescuentoParaCliente(
       const diasTranscurridos = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
       // Buscar en ReglaDeDescuento (tipo REPOSICION, activas) el tramo correspondiente
-      const reglasReposicion = await prisma.reglaDeDescuento.findMany({
+      const reglasReposicion = await db.reglaDeDescuento.findMany({
         where: {
           tipo: TipoDescuento.REPOSICION,
           activa: true,
@@ -207,7 +231,7 @@ export async function calcularDescuentoParaCliente(
       }
 
       if (!reglaSeleccionada) {
-        // Pasaron más días del tramo máximo (ej: >90 días) -> SIN_DESCUENTO
+        // Pasaron más días del tramo máximo (ej: >55 días) -> SIN_DESCUENTO
         return resultadoVacio;
       }
     }

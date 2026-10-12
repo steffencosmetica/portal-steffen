@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { Pack, PackItem, Producto, Cliente, Zona, EstadoZona } from '@prisma/client';
+import { tieneDistribuidorActivo, ClienteZonaLike } from '@/lib/services/zona';
 
 export type PackConItems = Pack & {
   items: (PackItem & {
@@ -35,11 +36,9 @@ export function obtenerPrecioPackParaCliente(
     precioPromocional?: any;
     precioPssEquivalente?: any;
   },
-  cliente?: (Cliente & { zona?: Zona | null }) | null
+  cliente?: ClienteZonaLike | null
 ): PreciosEfectivosPack {
-  const tieneDistribuidor = Boolean(
-    cliente?.zona?.distribuidorId || cliente?.zona?.estado === EstadoZona.CON_DISTRIBUIDOR
-  );
+  const tieneDistribuidor = tieneDistribuidorActivo(cliente);
 
   const precioDist = pack.precioDistribuidor ? Number(pack.precioDistribuidor) : null;
   const precioDir = pack.precioDirecto ? Number(pack.precioDirecto) : null;

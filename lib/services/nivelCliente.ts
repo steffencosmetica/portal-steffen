@@ -1,13 +1,23 @@
 import { prisma } from '@/lib/prisma';
-import { TipoDescuento, EstadoPedido, EstadoZona } from '@prisma/client';
+import { TipoDescuento, EstadoPedido, EstadoZona, EstadoCliente } from '@prisma/client';
+import { tieneDistribuidorActivo } from '@/lib/services/zona';
 
 export interface ClienteConZonaMinimo {
   id: string;
+  estadoCliente?: EstadoCliente | string | null;
   zona?: {
-    id?: string;
-    estado?: EstadoZona | string;
-    localidad?: string;
-    provincia?: string;
+    id?: string | null;
+    estado?: EstadoZona | string | null;
+    distribuidorId?: string | null;
+    localidad?: string | null;
+    provincia?: string | null;
+    distribuidor?: {
+      id?: string | null;
+      estado?: string | null;
+      nombre?: string | null;
+      empresa?: string | null;
+      whatsapp?: string | null;
+    } | null;
   } | null;
 }
 
@@ -26,8 +36,8 @@ export interface EstadoNivelCliente {
  * Obtiene el estado del nivel y beneficios de reposición para un cliente en base a sus compras completadas.
  * 
  * Reglas:
- * - Elegible si la zona es SIN_DISTRIBUIDOR (o venta directa) Y ya tiene al menos 1 pedido efectivo previo.
- * - Si no tiene compras completadas: estado elegible pero sin historial completado.
+ * - Elegible si la cuenta es ACTIVO, zona sin distribuidor activo Y ya tiene al menos 1 pedido efectivo previo.
+ * - Si no tiene compras previas: aplica beneficio de bienvenida (PRIMER_PEDIDO).
  * - Si tiene compras completadas: calcula días transcurridos y evalúa el tramo activo de REPOSICION.
  */
 export async function obtenerEstadoNivelCliente(
@@ -46,15 +56,21 @@ export async function obtenerEstadoNivelCliente(
     };
   }
 
-  // 1. Obtener cliente completo con su zona si no fue provista
-  let zonaCliente = cliente.zona;
-  if (zonaCliente === undefined) {
-    const clienteDb = await prisma.cliente.findUnique({
+  // 1. Obtener cliente completo con su zona y distribuidor si no fue provista
+  let clienteDb: any = null;
+  if (!cliente.zona || (cliente as any).zona?.distribuidor === undefined) {
+    clienteDb = await prisma.cliente.findUnique({
       where: { id: cliente.id },
-      include: { zona: true },
+      include: {
+        zona: {
+          include: {
+            distribuidor: true,
+          },
+        },
+      },
     });
-    zonaCliente = clienteDb?.zona || null;
   }
+  const clienteEfectivo = clienteDb || cliente;
 
   // 2. Contar pedidos confirmados previos (excluyendo CARRITO y CANCELADO)
   const pedidosEfectivosCount = await prisma.pedido.count({
@@ -66,7 +82,7 @@ export async function obtenerEstadoNivelCliente(
     },
   });
 
-  // Si no tiene pedidos previos, está en etapa de PRIMER_PEDIDO
+  // Si no tiene pedidos previos, está en etapa de PRIMER_PEDIDO (aplica a todo registrado)
   if (pedidosEfectivosCount === 0) {
     let porcentajePrimerPedido = 20;
     try {
@@ -92,9 +108,26 @@ export async function obtenerEstadoNivelCliente(
     };
   }
 
-  // Si tiene pedidos previos, chequear que la zona sea SIN_DISTRIBUIDOR
-  const esZonaDirecta = !zonaCliente || zonaCliente.estado === EstadoZona.SIN_DISTRIBUIDOR;
-  if (!esZonaDirecta) {
+  // Si ya tiene pedidos previos, verificar que la cuenta esté aprobada (ACTIVO) para reposición
+  const esActivo =
+    clienteEfectivo.estadoCliente === EstadoCliente.ACTIVO ||
+    (clienteEfectivo.estadoCliente as string) === 'ACTIVO';
+
+  if (!esActivo) {
+    return {
+      esElegible: false,
+      motivoNoElegible: 'SIN_CLIENTE',
+      fechaUltimaCompraCompletada: null,
+      diasTranscurridos: null,
+      porcentajeActual: null,
+      diasRestantesParaCorte: null,
+      mensajePrincipal: 'Cuenta en revisión',
+      mensajeSecundario: 'Tu cuenta está en revisión para acceder a los beneficios de reposición.',
+    };
+  }
+
+  // Si tiene pedidos previos y es ACTIVO, chequear que no tenga distribuidor oficial activo
+  if (tieneDistribuidorActivo(clienteEfectivo)) {
     return {
       esElegible: false,
       motivoNoElegible: 'CON_DISTRIBUIDOR',
