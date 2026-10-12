@@ -6,6 +6,7 @@ import { CalculoDescuentoResultado } from '@/lib/services/descuentos';
 import { TipoItemCarrito } from '@/lib/types/carrito';
 import { VarianteProducto } from '@/lib/utils/variantes';
 import { liquidarCarrito } from '@/lib/services/liquidacion';
+import { generarTokenCotizacion, getOrCreateGuestSessionId } from '@/lib/services/cotizacion';
 
 export type { CalculoDescuentoResultado };
 
@@ -47,6 +48,7 @@ export interface ObtenerCarritoResultado {
   subtotalProductos?: number;
   subtotalPacks?: number;
   esSinDistribuidor?: boolean;
+  cotizacionToken?: string;
 }
 
 /**
@@ -60,10 +62,22 @@ export async function obtenerProductosDelCarritoAction(
   const sesion = await obtenerSesionCliente();
   const cliente = sesion?.cliente || null;
 
+  let guestSessionId: string | null = null;
+  if (!cliente) {
+    guestSessionId = await getOrCreateGuestSessionId();
+  }
+
   // 2. Liquidar el carrito mediante el motor comercial central
   const resultado = await liquidarCarrito(itemsCliente, cliente, { modo: 'CARRITO' });
 
-  // 3. Devolver la estructura que espera el frontend (CarritoClient)
+  // 3. Generar token firmado de cotización vinculando identidad de comprador
+  const cotizacionToken = generarTokenCotizacion({
+    liquidacion: resultado,
+    clienteId: cliente?.id || null,
+    guestSessionId,
+  });
+
+  // 4. Devolver la estructura que espera el frontend (CarritoClient)
   return {
     itemsValidos: resultado.itemsValidos.map((it) => ({
       id: it.id,
@@ -100,5 +114,6 @@ export async function obtenerProductosDelCarritoAction(
     subtotalProductos: resultado.subtotalProductos,
     subtotalPacks: resultado.subtotalPacks,
     esSinDistribuidor: resultado.esSinDistribuidor,
+    cotizacionToken,
   };
 }

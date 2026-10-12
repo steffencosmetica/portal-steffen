@@ -7,6 +7,13 @@ import { obtenerNumeroWhatsappOFallar, generarUrlWhatsapp, ConfiguracionWhatsapp
 import { EstadoCliente, EstadoPedido } from '@prisma/client';
 import { TipoItemCarrito } from '@/lib/types/carrito';
 import { setGuestOrderAuthCookie } from '@/lib/security/guestOrderAuth';
+import {
+  verificarTokenCotizacion,
+  compararCotizacionConLiquidacion,
+  generarTokenCotizacion,
+  getGuestSessionId,
+  DiferenciaCotizacion,
+} from '@/lib/services/cotizacion';
 
 export interface ConfirmarPedidoItemInput {
   id: string;
@@ -24,7 +31,8 @@ export interface DatosInvitadoInput {
 }
 
 export interface OpcionesConfirmacionPedido {
-  totalEsperado?: number;
+  cotizacionToken?: string;
+  guestSessionIdOverride?: string;
 }
 
 export interface ConfirmarPedidoResultado {
@@ -34,7 +42,17 @@ export interface ConfirmarPedidoResultado {
   pedidoId?: string;
   numeroPedido?: number;
   whatsappUrl?: string;
-  totalActualizado?: number;
+  requiereAceptacionCotizacion?: boolean;
+  cotizacionActualizadaToken?: string;
+  diferenciasCotizacion?: DiferenciaCotizacion[];
+  importesActualizados?: {
+    subtotalGeneral: number;
+    subtotalProductos: number;
+    subtotalPacks: number;
+    descuento: any;
+    totalFinal: number;
+    tipoPrecio: 'PUBLICO' | 'PROFESIONAL';
+  };
 }
 
 /**
@@ -189,13 +207,12 @@ function construirMensajeWhatsapp(params: {
 
 /**
  * Server Action que procesa la confirmación del pedido:
- * 1. Admite tanto usuarios profesionales logueados como usuarios invitados sin sesión.
- * 2. Valida formato estricto de ítems y cantidades enteras > 0.
- * 3. Delega la validación comercial y de catálogo en el motor central liquidarCarrito({ modo: 'CONFIRMACION' }).
- * 4. Valida consistencia de importes si el cliente envía totalEsperado (prevención de cambios silenciosos).
- * 5. Guarda atómicamente el Pedido y sus PedidoItem en PostgreSQL mediante transacción.
- * 6. Genera el mensaje oficial y la URL de WhatsApp.
- * 7. Para pedidos de invitados, firma y establece la cookie de autorización HttpOnly.
+ * 1. Exige obligatoriamente una cotización verificable mediante cotizacionToken (firmada con HMAC-SHA256).
+ * 2. Ejecuta la validación, cálculo y persistencia dentro de una transacción PostgreSQL (prisma.$transaction).
+ * 3. Para clientes registrados, adquiere un lock transaccional exclusivo (pg_advisory_xact_lock) para evitar carreras en primera compra.
+ * 4. Recalcula los importes y los compara exhaustivamente contra la cotización aprobada.
+ * 5. Si hay cualquier discrepancia comercial, aborta la transacción y devuelve la cotización actualizada.
+ * 6. Si coincide, persiste Pedido y PedidoItem atómicamente y genera el mensaje de WhatsApp.
  */
 export async function confirmarPedidoAction(
   itemsCliente: ConfirmarPedidoItemInput[],
@@ -216,7 +233,26 @@ export async function confirmarPedidoAction(
       throw configError;
     }
 
-    // 1. Obtener cliente autenticado en el servidor (opcional: usuarios invitados pueden comprar sin login)
+    // 1. Validación obligatoria de cotización aceptada
+    if (!opciones?.cotizacionToken || typeof opciones.cotizacionToken !== 'string' || opciones.cotizacionToken.trim() === '') {
+      return {
+        success: false,
+        error: 'Es necesario contar con una cotización vigente de tu carrito para confirmar el pedido. Por favor revisá tu carrito antes de continuar.',
+        requiereAceptacionCotizacion: true,
+      };
+    }
+
+    const verif = verificarTokenCotizacion(opciones.cotizacionToken);
+    if (!verif.valid || !verif.payload) {
+      return {
+        success: false,
+        error: verif.error || 'La cotización enviada es inválida o ha sido alterada. Por favor actualizá tu carrito.',
+        requiereAceptacionCotizacion: true,
+      };
+    }
+    const cotizacionPayload = verif.payload;
+
+    // 2. Obtener cliente autenticado en el servidor
     let cliente: any = null;
     try {
       const sesion = await obtenerSesionCliente();
@@ -233,8 +269,12 @@ export async function confirmarPedidoAction(
       cliente = null;
     }
 
-    // Si el usuario no está autenticado como cliente profesional, los datos de contacto son obligatorios
+    // 3. Identificación y datos obligatorios de invitados
+    let guestSessionId: string | null = null;
     if (!cliente) {
+      const cookieSessionId = await getGuestSessionId();
+      guestSessionId = cookieSessionId || opciones?.guestSessionIdOverride || null;
+
       const nombreValido = datosInvitado?.nombre && datosInvitado.nombre.trim().length >= 2;
       const localidadValida = datosInvitado?.localidad && datosInvitado.localidad.trim().length >= 2;
       const telefonoValido = datosInvitado?.telefono && datosInvitado.telefono.trim().length >= 5;
@@ -247,7 +287,7 @@ export async function confirmarPedidoAction(
       }
     }
 
-    // 2. Validar que la lista de ítems no esté vacía y contenga datos válidos
+    // 4. Validar formato estricto de ítems
     if (!itemsCliente || !Array.isArray(itemsCliente) || itemsCliente.length === 0) {
       return {
         success: false,
@@ -271,75 +311,95 @@ export async function confirmarPedidoAction(
       }
     }
 
-    // 3. Liquidar el pedido mediante el motor comercial central en modo CONFIRMACION
-    const liquidacion = await liquidarCarrito(itemsCliente, cliente, { modo: 'CONFIRMACION' });
-
-    if (!liquidacion.esValidoParaConfirmar) {
-      return {
-        success: false,
-        error:
-          liquidacion.errorConfirmacion ||
-          'Uno o más productos o packs de tu pedido ya no están disponibles en el catálogo. Hemos actualizado tu carrito para que puedas revisarlo.',
-        itemsRemovidosIds: liquidacion.itemsRemovidosIds.map((it) => it.id),
-      };
-    }
-
-    if (liquidacion.itemsValidos.length === 0) {
-      return {
-        success: false,
-        error: 'El carrito está vacío o no contiene productos válidos para confirmar.',
-        itemsRemovidosIds: liquidacion.itemsRemovidosIds.map((it) => it.id),
-      };
-    }
-
-    // 4. Verificación de discrepancia de importes respecto a lo visualizado previamente
-    if (opciones?.totalEsperado !== undefined) {
-      const diferencia = Math.abs(opciones.totalEsperado - liquidacion.totalFinal);
-      if (diferencia > 0.01) {
-        return {
-          success: false,
-          error: `Los precios o descuentos de tu carrito se han actualizado. Total anterior: ${formatoMoneda(opciones.totalEsperado)}, nuevo total: ${formatoMoneda(liquidacion.totalFinal)}. Por favor revisá tu carrito antes de confirmar.`,
-          totalActualizado: liquidacion.totalFinal,
-        };
-      }
-    }
-
-    // 5. Determinar o preparar cliente para persistencia en base de datos
-    let clienteIdParaPedido: string | null = cliente ? cliente.id : null;
-
-    if (!clienteIdParaPedido) {
-      try {
-        let clienteInvitado = await prisma.cliente.findFirst({
-          where: { email: 'invitado@steffen.com' },
-        });
-
-        if (!clienteInvitado) {
-          clienteInvitado = await prisma.cliente.create({
-            data: {
-              nombre: datosInvitado?.nombre?.trim() || 'Cliente Invitado',
-              apellido: 'Web',
-              salon: datosInvitado?.salon?.trim() || 'Consumidor Final',
-              whatsapp: datosInvitado?.telefono?.trim() || '5492230000000',
-              email: 'invitado@steffen.com',
-              provincia: datosInvitado?.provincia?.trim() || 'A coordinar',
-              localidad: datosInvitado?.localidad?.trim() || 'A coordinar',
-              tipoDeNegocio: 'Consumidor / Salón No Registrado',
-              estadoCliente: EstadoCliente.PENDIENTE_APROBACION,
-            },
-          });
-        }
-        clienteIdParaPedido = clienteInvitado.id;
-      } catch (errCliente) {
-        console.warn('No se pudo asociar a cliente invitado en BD:', errCliente);
-      }
-    }
-
-    // 6. Si hay clienteId, persistir Pedido y PedidoItems en PostgreSQL
+    // 5. Ejecución atómica y serializada en PostgreSQL
     let pedidoGuardado: any = null;
 
-    if (clienteIdParaPedido) {
-      try {
-        pedidoGuardado = await prisma.$transaction(async (tx) => {
+    try {
+      pedidoGuardado = await prisma.$transaction(
+        async (tx) => {
+          // A. Timeout local de 5 segundos para prevenir bloqueos infinitos
+          await tx.$executeRaw`SET LOCAL lock_timeout = '5000'`;
+
+          // B. Bloqueo transaccional exclusivo por cliente registrado (coordinado en PostgreSQL)
+          if (cliente?.id) {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('steffen_cliente_pedido'), hashtext(${cliente.id}))`;
+          }
+
+          // C. Liquidar el carrito con datos frescos dentro de la transacción
+          const liquidacion = await liquidarCarrito(itemsCliente, cliente, {
+            modo: 'CONFIRMACION',
+            prismaClient: tx,
+          });
+
+          if (!liquidacion.esValidoParaConfirmar) {
+            const errVal: any = new Error(liquidacion.errorConfirmacion || 'Uno o más productos ya no están disponibles.');
+            errVal.esErrorValidacion = true;
+            errVal.itemsRemovidosIds = liquidacion.itemsRemovidosIds.map((it) => it.id);
+            throw errVal;
+          }
+
+          if (liquidacion.itemsValidos.length === 0) {
+            const errVacio: any = new Error('El carrito no contiene productos válidos para confirmar.');
+            errVacio.esErrorValidacion = true;
+            throw errVacio;
+          }
+
+          // D. Comparación exhaustiva contra la cotización aprobada
+          const comparacion = compararCotizacionConLiquidacion({
+            cotizacion: cotizacionPayload,
+            liquidacion,
+            cliente,
+            guestSessionId,
+          });
+
+          if (!comparacion.coincide) {
+            const nuevaCotizacionToken = generarTokenCotizacion({
+              liquidacion,
+              clienteId: cliente?.id || null,
+              guestSessionId: !cliente ? guestSessionId : null,
+            });
+
+            const errDiscrepancia: any = new Error(comparacion.motivo || 'Los importes de tu carrito han cambiado.');
+            errDiscrepancia.esDiscrepanciaCotizacion = true;
+            errDiscrepancia.nuevaCotizacion = nuevaCotizacionToken;
+            errDiscrepancia.diferencias = comparacion.diferencias;
+            errDiscrepancia.importesActualizados = {
+              subtotalGeneral: liquidacion.subtotalGeneral,
+              subtotalProductos: liquidacion.subtotalProductos,
+              subtotalPacks: liquidacion.subtotalPacks,
+              descuento: liquidacion.descuento,
+              totalFinal: liquidacion.totalFinal,
+              tipoPrecio: liquidacion.tipoPrecio,
+            };
+            throw errDiscrepancia;
+          }
+
+          // E. Persistencia del Pedido y PedidoItems
+          let clienteIdParaPedido: string | null = cliente ? cliente.id : null;
+
+          if (!clienteIdParaPedido) {
+            let clienteInvitado = await tx.cliente.findFirst({
+              where: { email: 'invitado@steffen.com' },
+            });
+
+            if (!clienteInvitado) {
+              clienteInvitado = await tx.cliente.create({
+                data: {
+                  nombre: datosInvitado?.nombre?.trim() || 'Cliente Invitado',
+                  apellido: 'Web',
+                  salon: datosInvitado?.salon?.trim() || 'Consumidor Final',
+                  whatsapp: datosInvitado?.telefono?.trim() || '5492230000000',
+                  email: 'invitado@steffen.com',
+                  provincia: datosInvitado?.provincia?.trim() || 'A coordinar',
+                  localidad: datosInvitado?.localidad?.trim() || 'A coordinar',
+                  tipoDeNegocio: 'Consumidor / Salón No Registrado',
+                  estadoCliente: EstadoCliente.PENDIENTE_APROBACION,
+                },
+              });
+            }
+            clienteIdParaPedido = clienteInvitado.id;
+          }
+
           const nuevoPedido = await tx.pedido.create({
             data: {
               clienteId: clienteIdParaPedido!,
@@ -389,14 +449,48 @@ export async function confirmarPedidoAction(
               mensajeWhatsappGenerado: mensajeWhatsapp,
             },
           });
-        });
-      } catch (errTx) {
-        console.warn('No se pudo guardar la orden en la BD, generando WhatsApp directamente:', errTx);
+        },
+        {
+          timeout: 10000,
+        }
+      );
+    } catch (errTx: any) {
+      if (errTx?.esDiscrepanciaCotizacion) {
+        return {
+          success: false,
+          error: `Los precios, descuentos o productos de tu carrito han cambiado (${errTx.message}). Por favor revisá los importes actualizados antes de confirmar.`,
+          requiereAceptacionCotizacion: true,
+          cotizacionActualizadaToken: errTx.nuevaCotizacion,
+          diferenciasCotizacion: errTx.diferencias,
+          importesActualizados: errTx.importesActualizados,
+        };
       }
+
+      if (errTx?.esErrorValidacion) {
+        return {
+          success: false,
+          error: errTx.message,
+          itemsRemovidosIds: errTx.itemsRemovidosIds,
+        };
+      }
+
+      const errStr = String(errTx);
+      if (errStr.includes('55P03') || errStr.toLowerCase().includes('lock timeout')) {
+        return {
+          success: false,
+          error: 'El servidor está procesando otra operación para tu cuenta. Por favor intentá nuevamente en unos momentos.',
+        };
+      }
+
+      console.error('Error durante la transacción de confirmación:', errTx);
+      return {
+        success: false,
+        error: 'No se pudo procesar la confirmación del pedido. Por favor intentá nuevamente.',
+      };
     }
 
     if (pedidoGuardado) {
-      // Para pedidos realizados sin sesión de cliente profesional, establecer cookie HttpOnly firmada
+      // Para pedidos de invitados, emitir cookie HttpOnly firmada
       if (!cliente && pedidoGuardado.id) {
         try {
           await setGuestOrderAuthCookie(pedidoGuardado.id);
@@ -414,36 +508,9 @@ export async function confirmarPedidoAction(
       };
     }
 
-    // Fallback garantizado sin bloquear al usuario: generar el mensaje directo de WhatsApp
-    const numeroPedidoFallback = Math.floor(100000 + Math.random() * 900000);
-    const mensajeFallback = construirMensajeWhatsapp({
-      numeroPedido: numeroPedidoFallback,
-      cliente,
-      datosInvitado,
-      items: liquidacion.itemsValidos.map((i) => ({
-        tipo: i.tipo,
-        nombre: i.nombre,
-        presentacion: i.presentacion,
-        variante: i.variante || null,
-        productosDetalle: i.productosDetalle,
-        cantidad: i.cantidad,
-        precioUnitarioPss: i.precioUnitario,
-        subtotalItem: i.subtotal,
-      })),
-      subtotalPss: liquidacion.subtotalGeneral,
-      montoDescuento: liquidacion.descuento.montoDescuento,
-      porcentajeDescuento: liquidacion.descuento.porcentaje,
-      etiquetaDescuento: liquidacion.descuento.etiqueta,
-      totalFinal: liquidacion.totalFinal,
-      tipoPrecio: liquidacion.tipoPrecio,
-    });
-    const whatsappUrlFallback = generarUrlWhatsapp(mensajeFallback, numeroWhatsapp);
-
     return {
-      success: true,
-      pedidoId: 'invitado',
-      numeroPedido: numeroPedidoFallback,
-      whatsappUrl: whatsappUrlFallback,
+      success: false,
+      error: 'No fue posible registrar el pedido. Por favor intentá nuevamente.',
     };
   } catch (error) {
     console.error('Error al confirmar y procesar el pedido:', error);
@@ -453,3 +520,4 @@ export async function confirmarPedidoAction(
     };
   }
 }
+

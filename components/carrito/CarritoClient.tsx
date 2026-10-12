@@ -65,6 +65,9 @@ export function CarritoClient({
   const [productosRemovidosAviso, setProductosRemovidosAviso] = useState<number>(0);
   const [mensajesAviso, setMensajesAviso] = useState<string[]>([]);
   const [errorConfirmacion, setErrorConfirmacion] = useState<string | null>(null);
+  const [cotizacionVigente, setCotizacionVigente] = useState<string | null>(null);
+  const [requiereAceptacionCotizacion, setRequiereAceptacionCotizacion] = useState<boolean>(false);
+  const [avisoCambioCotizacion, setAvisoCambioCotizacion] = useState<string | null>(null);
   const [isSincronizando, startFetchTransition] = useTransition();
   const [isConfirmando, setIsConfirmando] = useState<boolean>(false);
 
@@ -196,6 +199,9 @@ export function CarritoClient({
             etiqueta: 'Sin descuento',
           });
           setMensajesAviso([]);
+          setCotizacionVigente(null);
+          setRequiereAceptacionCotizacion(false);
+          setAvisoCambioCotizacion(null);
         }
         return;
       }
@@ -224,6 +230,11 @@ export function CarritoClient({
       if (resultado.esSinDistribuidor !== undefined) {
         setEsSinDistribuidorState(Boolean(resultado.esSinDistribuidor));
       }
+      if (resultado.cotizacionToken) {
+        setCotizacionVigente(resultado.cotizacionToken);
+      }
+      setRequiereAceptacionCotizacion(false);
+      setAvisoCambioCotizacion(null);
     });
 
     return () => {
@@ -262,10 +273,30 @@ export function CarritoClient({
     try {
       const resultado = await confirmarPedidoAction(
         items,
-        !usuarioLogueado ? datosInvitado : undefined
+        !usuarioLogueado ? datosInvitado : undefined,
+        { cotizacionToken: cotizacionVigente || '' }
       );
 
       if (!resultado.success) {
+        // Si requiere aceptación explícita de importes actualizados
+        if (resultado.requiereAceptacionCotizacion) {
+          if (resultado.cotizacionActualizadaToken) {
+            setCotizacionVigente(resultado.cotizacionActualizadaToken);
+          }
+          setRequiereAceptacionCotizacion(true);
+          setAvisoCambioCotizacion(resultado.error || 'Los importes de tu carrito han sido actualizados según las condiciones vigentes.');
+
+          if (resultado.importesActualizados) {
+            setSubtotalPss(resultado.importesActualizados.subtotalGeneral);
+            setSubtotalProductos(resultado.importesActualizados.subtotalProductos);
+            setSubtotalPacks(resultado.importesActualizados.subtotalPacks);
+            setDescuentoInfo(resultado.importesActualizados.descuento);
+            setTipoPrecio(resultado.importesActualizados.tipoPrecio);
+          }
+          setIsConfirmando(false);
+          return;
+        }
+
         if (resultado.itemsRemovidosIds && resultado.itemsRemovidosIds.length > 0) {
           resultado.itemsRemovidosIds.forEach((id) => quitarItem(id));
           setProductosRemovidosAviso((prev) => prev + resultado.itemsRemovidosIds!.length);
@@ -782,18 +813,44 @@ export function CarritoClient({
               </div>
             )}
 
+            {/* Aviso de cotización actualizada (requiere aceptación explícita) */}
+            {requiereAceptacionCotizacion && avisoCambioCotizacion && (
+              <div
+                id="aviso-cotizacion-actualizada"
+                className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5 animate-in fade-in duration-200"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold">Condiciones comerciales actualizadas</p>
+                  <p className="leading-relaxed">{avisoCambioCotizacion}</p>
+                  <p className="text-[11px] text-amber-700 font-medium">
+                    Por favor revisá los importes actuales antes de continuar con tu pedido.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Botón de Confirmación Principal */}
             <button
               id="btn-confirmar-pedido-whatsapp"
               type="button"
               disabled={isConfirmando || itemsParaMostrar.length === 0}
               onClick={handleConfirmarPedido}
-              className="w-full py-4 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-md shadow-emerald-600/20 cursor-pointer"
+              className={`w-full py-4 px-5 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2.5 transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                requiereAceptacionCotizacion
+                  ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                  : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+              }`}
             >
               {isConfirmando ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
                   <span>Procesando y registrando pedido...</span>
+                </>
+              ) : requiereAceptacionCotizacion ? (
+                <>
+                  <CheckCircle2 className="w-5 h-5 text-amber-100" />
+                  <span>Aceptar nuevos importes y confirmar</span>
                 </>
               ) : (
                 <>
