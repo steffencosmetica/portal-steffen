@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useTransition, useMemo } from 'react';
+import React, { useEffect, useState, useTransition, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -70,6 +70,7 @@ export function CarritoClient({
   const [avisoCambioCotizacion, setAvisoCambioCotizacion] = useState<string | null>(null);
   const [isSincronizando, startFetchTransition] = useTransition();
   const [isConfirmando, setIsConfirmando] = useState<boolean>(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
 
   // Datos para compradores invitados (sin sesión)
   const [datosInvitado, setDatosInvitado] = useState({
@@ -144,6 +145,7 @@ export function CarritoClient({
     tipo?: TipoItemCarrito,
     variante?: string | null
   ) => {
+    idempotencyKeyRef.current = null;
     actualizarCantidad(id, nuevaCantidad, tipo, variante);
     setItemsDetalle((prev) => {
       if (nuevaCantidad <= 0) {
@@ -165,6 +167,7 @@ export function CarritoClient({
   };
 
   const handleQuitarItemCarrito = (id: string, tipo?: TipoItemCarrito, variante?: string | null) => {
+    idempotencyKeyRef.current = null;
     quitarItem(id, tipo, variante);
     setItemsDetalle((prev) =>
       prev.filter(
@@ -270,16 +273,24 @@ export function CarritoClient({
     setErrorConfirmacion(null);
     setIsConfirmando(true);
 
+    if (!idempotencyKeyRef.current || requiereAceptacionCotizacion) {
+      idempotencyKeyRef.current = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null;
+    }
+
     try {
       const resultado = await confirmarPedidoAction(
         items,
         !usuarioLogueado ? datosInvitado : undefined,
-        { cotizacionToken: cotizacionVigente || '' }
+        {
+          cotizacionToken: cotizacionVigente || '',
+          idempotencyKey: idempotencyKeyRef.current || undefined,
+        }
       );
 
       if (!resultado.success) {
         // Si requiere aceptación explícita de importes actualizados
         if (resultado.requiereAceptacionCotizacion) {
+          idempotencyKeyRef.current = null;
           if (resultado.cotizacionActualizadaToken) {
             setCotizacionVigente(resultado.cotizacionActualizadaToken);
           }
@@ -307,6 +318,7 @@ export function CarritoClient({
       }
 
       if (resultado.pedidoId && resultado.whatsappUrl) {
+        idempotencyKeyRef.current = null;
         vaciarCarrito();
         try {
           window.open(resultado.whatsappUrl, '_blank', 'noopener,noreferrer');

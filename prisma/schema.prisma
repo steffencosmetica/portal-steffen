@@ -311,6 +311,7 @@ model Pedido {
   updatedAt               DateTime      @updatedAt
 
   items                   PedidoItem[]
+  registroIdempotencia    RegistroIdempotencia?
 
   @@index([clienteId])
   @@index([estado])
@@ -357,3 +358,22 @@ model CarritoAbandonado {
   @@index([recuperado])
   @@map("carritos_abandonados")
 }
+
+/// Registro transaccional de idempotencia para confirmación de pedidos
+model RegistroIdempotencia {
+  id              String    @id @default(uuid())
+  clave           String    @unique // UUID v4 provisto por el cliente para el intento de confirmación
+  clienteId       String?   // ID del cliente registrado si la compra es autenticada
+  guestSessionId  String?   // Identificador seguro de sesión anónima si es invitado
+  pedidoId        String    @unique // Relación 1-a-1 obligatoria con el Pedido generado
+  pedido          Pedido    @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  payloadHash     String    // Hash SHA-256 canónico del contenido (ítems, comprador, datos y cotización)
+  resultadoJson   String?   @db.Text // Caché de la respuesta oficial serializada
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([clienteId])
+  @@index([guestSessionId])
+  @@map("registros_idempotencia")
+}
+

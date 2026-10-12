@@ -14,6 +14,13 @@ import {
   getGuestSessionId,
   DiferenciaCotizacion,
 } from '@/lib/services/cotizacion';
+import {
+  esUuidValido,
+  calcularPayloadHash,
+  validarAccesoIdempotente,
+  reconstruirResultadoDesdePedido,
+  ejecutarConReintentoTransaccional,
+} from '@/lib/services/idempotencia';
 
 export interface ConfirmarPedidoItemInput {
   id: string;
@@ -33,6 +40,8 @@ export interface DatosInvitadoInput {
 export interface OpcionesConfirmacionPedido {
   cotizacionToken?: string;
   guestSessionIdOverride?: string;
+  idempotencyKey?: string;
+  clienteOverride?: any;
 }
 
 export interface ConfirmarPedidoResultado {
@@ -233,43 +242,26 @@ export async function confirmarPedidoAction(
       throw configError;
     }
 
-    // 1. Validación obligatoria de cotización aceptada
-    if (!opciones?.cotizacionToken || typeof opciones.cotizacionToken !== 'string' || opciones.cotizacionToken.trim() === '') {
-      return {
-        success: false,
-        error: 'Es necesario contar con una cotización vigente de tu carrito para confirmar el pedido. Por favor revisá tu carrito antes de continuar.',
-        requiereAceptacionCotizacion: true,
-      };
-    }
-
-    const verif = verificarTokenCotizacion(opciones.cotizacionToken);
-    if (!verif.valid || !verif.payload) {
-      return {
-        success: false,
-        error: verif.error || 'La cotización enviada es inválida o ha sido alterada. Por favor actualizá tu carrito.',
-        requiereAceptacionCotizacion: true,
-      };
-    }
-    const cotizacionPayload = verif.payload;
-
-    // 2. Obtener cliente autenticado en el servidor
-    let cliente: any = null;
-    try {
-      const sesion = await obtenerSesionCliente();
-      if (sesion?.cliente) {
-        cliente = sesion.cliente;
-        if (cliente.estadoCliente === EstadoCliente.BLOQUEADO) {
-          return {
-            success: false,
-            error: 'Tu cuenta profesional se encuentra bloqueada por administración. No es posible confirmar pedidos.',
-          };
+    // 1. Obtener cliente autenticado en el servidor
+    let cliente: any = opciones?.clienteOverride || null;
+    if (!cliente) {
+      try {
+        const sesion = await obtenerSesionCliente();
+        if (sesion?.cliente) {
+          cliente = sesion.cliente;
         }
+      } catch (authError) {
+        cliente = null;
       }
-    } catch (authError) {
-      cliente = null;
+    }
+    if (cliente && cliente.estadoCliente === EstadoCliente.BLOQUEADO) {
+      return {
+        success: false,
+        error: 'Tu cuenta profesional se encuentra bloqueada por administración. No es posible confirmar pedidos.',
+      };
     }
 
-    // 3. Identificación y datos obligatorios de invitados
+    // 2. Identificación y datos obligatorios de invitados
     let guestSessionId: string | null = null;
     if (!cliente) {
       const cookieSessionId = await getGuestSessionId();
@@ -287,7 +279,7 @@ export async function confirmarPedidoAction(
       }
     }
 
-    // 4. Validar formato estricto de ítems
+    // 3. Validar formato estricto de ítems
     if (!itemsCliente || !Array.isArray(itemsCliente) || itemsCliente.length === 0) {
       return {
         success: false,
@@ -311,170 +303,313 @@ export async function confirmarPedidoAction(
       }
     }
 
-    // 5. Ejecución atómica y serializada en PostgreSQL
-    let pedidoGuardado: any = null;
+    // 4. Validación de la clave de idempotencia
+    if (!opciones?.idempotencyKey || !esUuidValido(opciones.idempotencyKey)) {
+      return {
+        success: false,
+        error: 'Es requerida una clave de confirmación válida (idempotencyKey) para procesar el pedido.',
+      };
+    }
+
+    // 5. Cálculo del hash canónico del intento
+    const payloadHash = calcularPayloadHash({
+      items: itemsCliente,
+      clienteId: cliente?.id || null,
+      guestSessionId,
+      datosInvitado,
+      cotizacionToken: opciones.cotizacionToken || null,
+    });
+
+    // 6. Verificación rápida de pedido completado previamente (Fuera de transacción)
+    // Permite recuperar el pedido exitoso incluso si la cotización ya venció después del commit
+    const registroPrevio = await prisma.registroIdempotencia.findUnique({
+      where: { clave: opciones.idempotencyKey },
+      include: { pedido: true },
+    });
+
+    if (registroPrevio) {
+      const verifAcceso = validarAccesoIdempotente(registroPrevio, {
+        clienteId: cliente?.id || null,
+        guestSessionId,
+        payloadHash,
+      });
+
+      if (!verifAcceso.autorizado) {
+        return {
+          success: false,
+          error: verifAcceso.error,
+        };
+      }
+
+      if (!cliente && registroPrevio.pedidoId) {
+        try {
+          await setGuestOrderAuthCookie(registroPrevio.pedidoId);
+        } catch (e) {
+          console.warn('Error restaurando cookie de invitado en recuperación:', e);
+        }
+      }
+
+      return reconstruirResultadoDesdePedido(registroPrevio);
+    }
+
+    // 7. Validación de cotización vigente (Requerida solo si el pedido aún no fue creado)
+    if (!opciones?.cotizacionToken || typeof opciones.cotizacionToken !== 'string' || opciones.cotizacionToken.trim() === '') {
+      return {
+        success: false,
+        error: 'Es necesario contar con una cotización vigente de tu carrito para confirmar el pedido. Por favor revisá tu carrito antes de continuar.',
+        requiereAceptacionCotizacion: true,
+      };
+    }
+
+    const verif = verificarTokenCotizacion(opciones.cotizacionToken);
+    if (!verif.valid || !verif.payload) {
+      return {
+        success: false,
+        error: verif.error || 'La cotización enviada es inválida o ha sido alterada. Por favor actualizá tu carrito.',
+        requiereAceptacionCotizacion: true,
+      };
+    }
+    const cotizacionPayload = verif.payload;
+
+    // 8. Ejecución atómica, serializada y reintentable en PostgreSQL
+    let resultadoFinal: ConfirmarPedidoResultado | null = null;
 
     try {
-      pedidoGuardado = await prisma.$transaction(
-        async (tx) => {
-          // A. Timeout local de 5 segundos para prevenir bloqueos infinitos
-          await tx.$executeRaw`SET LOCAL lock_timeout = '5000'`;
+      resultadoFinal = await ejecutarConReintentoTransaccional(async () => {
+        return await prisma.$transaction(
+          async (tx) => {
+            // A. Timeout local de 5 segundos para prevenir bloqueos infinitos
+            await tx.$executeRaw`SET LOCAL lock_timeout = '5000'`;
 
-          // B. Bloqueo transaccional exclusivo por cliente registrado (coordinado en PostgreSQL)
-          if (cliente?.id) {
-            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('steffen_cliente_pedido'), hashtext(${cliente.id}))::text AS lock`;
-            // Bloqueo compartido del registro del cliente para evitar modificaciones concurrentes de estado/distribuidor
-            await tx.$queryRaw`SELECT id FROM clientes WHERE id = ${cliente.id} FOR SHARE`;
-          }
+            // B. Bloqueo transaccional exclusivo por cliente registrado (coordinado en PostgreSQL)
+            if (cliente?.id) {
+              await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('steffen_cliente_pedido'), hashtext(${cliente.id}))::text AS lock`;
+              await tx.$queryRaw`SELECT id FROM clientes WHERE id = ${cliente.id} FOR SHARE`;
+              if (cliente.zona?.distribuidorId) {
+                await tx.$queryRaw`SELECT id FROM distribuidores WHERE id = ${cliente.zona.distribuidorId} FOR SHARE`;
+              }
+            }
 
-          // C. Bloqueo compartido selectivo (FOR SHARE) exclusivamente sobre los productos y packs del pedido
-          // Garantiza consistencia contra modificaciones concurrentes del catálogo por el administrador
-          // sin bloquear todo el catálogo ni impedir compras concurrentes de otros usuarios
-          const productosIds = Array.from(
-            new Set(itemsCliente.filter((i) => i.tipo === 'PRODUCTO').map((i) => i.id))
-          );
-          if (productosIds.length > 0) {
-            await tx.$queryRaw`SELECT id FROM productos WHERE id IN (${Prisma.join(productosIds)}) FOR SHARE`;
-          }
+            // B.1. Si mientras esperábamos el bloqueo otra transacción concurrente completó este intento
+            const registroCompletadoEnEspera = await tx.registroIdempotencia.findUnique({
+              where: { clave: opciones.idempotencyKey },
+              include: { pedido: true },
+            });
+            if (registroCompletadoEnEspera) {
+              const verifAcceso = validarAccesoIdempotente(registroCompletadoEnEspera, {
+                clienteId: cliente?.id || null,
+                guestSessionId,
+                payloadHash,
+              });
+              if (!verifAcceso.autorizado) {
+                const errAuth: any = new Error(verifAcceso.error || 'No autorizado');
+                errAuth.esErrorValidacion = true;
+                throw errAuth;
+              }
+              return reconstruirResultadoDesdePedido(registroCompletadoEnEspera);
+            }
 
-          const packsIds = Array.from(
-            new Set(itemsCliente.filter((i) => i.tipo === 'PACK').map((i) => i.id))
-          );
-          if (packsIds.length > 0) {
-            await tx.$queryRaw`SELECT id FROM packs WHERE id IN (${Prisma.join(packsIds)}) FOR SHARE`;
-          }
+            // C. Bloqueo determinístico de productos con ORDER BY id ASC FOR SHARE
+            const productosIds = Array.from(
+              new Set(itemsCliente.filter((i) => i.tipo === 'PRODUCTO').map((i) => i.id))
+            ).sort();
+            if (productosIds.length > 0) {
+              await tx.$queryRaw`SELECT id FROM productos WHERE id IN (${Prisma.join(productosIds)}) ORDER BY id ASC FOR SHARE`;
+            }
 
-          // D. Liquidar el carrito con datos frescos dentro de la transacción
-          const liquidacion = await liquidarCarrito(itemsCliente, cliente, {
-            modo: 'CONFIRMACION',
-            prismaClient: tx,
-          });
+            // D. Bloqueo determinístico de packs con ORDER BY id ASC FOR SHARE
+            const packsIds = Array.from(
+              new Set(itemsCliente.filter((i) => i.tipo === 'PACK').map((i) => i.id))
+            ).sort();
+            if (packsIds.length > 0) {
+              await tx.$queryRaw`SELECT id FROM packs WHERE id IN (${Prisma.join(packsIds)}) ORDER BY id ASC FOR SHARE`;
+            }
 
-          if (!liquidacion.esValidoParaConfirmar) {
-            const errVal: any = new Error(liquidacion.errorConfirmacion || 'Uno o más productos ya no están disponibles.');
-            errVal.esErrorValidacion = true;
-            errVal.itemsRemovidosIds = liquidacion.itemsRemovidosIds.map((it) => it.id);
-            throw errVal;
-          }
+            // E. Bloqueo determinístico de reglas de descuento activas con ORDER BY id ASC FOR SHARE
+            await tx.$queryRaw`SELECT id FROM reglas_de_descuento WHERE activa = true ORDER BY id ASC FOR SHARE`;
 
-          if (liquidacion.itemsValidos.length === 0) {
-            const errVacio: any = new Error('El carrito no contiene productos válidos para confirmar.');
-            errVacio.esErrorValidacion = true;
-            throw errVacio;
-          }
-
-          // D. Comparación exhaustiva contra la cotización aprobada
-          const comparacion = compararCotizacionConLiquidacion({
-            cotizacion: cotizacionPayload,
-            liquidacion,
-            cliente,
-            guestSessionId,
-          });
-
-          if (!comparacion.coincide) {
-            const nuevaCotizacionToken = generarTokenCotizacion({
-              liquidacion,
-              clienteId: cliente?.id || null,
-              guestSessionId: !cliente ? guestSessionId : null,
+            // F. Liquidar el carrito con datos frescos dentro de la transacción
+            const liquidacion = await liquidarCarrito(itemsCliente, cliente, {
+              modo: 'CONFIRMACION',
+              prismaClient: tx,
             });
 
-            const errDiscrepancia: any = new Error(comparacion.motivo || 'Los importes de tu carrito han cambiado.');
-            errDiscrepancia.esDiscrepanciaCotizacion = true;
-            errDiscrepancia.nuevaCotizacion = nuevaCotizacionToken;
-            errDiscrepancia.diferencias = comparacion.diferencias;
-            errDiscrepancia.importesActualizados = {
-              subtotalGeneral: liquidacion.subtotalGeneral,
-              subtotalProductos: liquidacion.subtotalProductos,
-              subtotalPacks: liquidacion.subtotalPacks,
-              descuento: liquidacion.descuento,
+            if (!liquidacion.esValidoParaConfirmar) {
+              const errVal: any = new Error(liquidacion.errorConfirmacion || 'Uno o más productos ya no están disponibles.');
+              errVal.esErrorValidacion = true;
+              errVal.itemsRemovidosIds = liquidacion.itemsRemovidosIds.map((it) => it.id);
+              throw errVal;
+            }
+
+            if (liquidacion.itemsValidos.length === 0) {
+              const errVacio: any = new Error('El carrito no contiene productos válidos para confirmar.');
+              errVacio.esErrorValidacion = true;
+              throw errVacio;
+            }
+
+            // G. Comparación exhaustiva contra la cotización aprobada
+            const comparacion = compararCotizacionConLiquidacion({
+              cotizacion: cotizacionPayload,
+              liquidacion,
+              cliente,
+              guestSessionId,
+            });
+
+            if (!comparacion.coincide) {
+              const nuevaCotizacionToken = generarTokenCotizacion({
+                liquidacion,
+                clienteId: cliente?.id || null,
+                guestSessionId: !cliente ? guestSessionId : null,
+              });
+
+              const errDiscrepancia: any = new Error(comparacion.motivo || 'Los importes de tu carrito han cambiado.');
+              errDiscrepancia.esDiscrepanciaCotizacion = true;
+              errDiscrepancia.nuevaCotizacion = nuevaCotizacionToken;
+              errDiscrepancia.diferencias = comparacion.diferencias;
+              errDiscrepancia.importesActualizados = {
+                subtotalGeneral: liquidacion.subtotalGeneral,
+                subtotalProductos: liquidacion.subtotalProductos,
+                subtotalPacks: liquidacion.subtotalPacks,
+                descuento: liquidacion.descuento,
+                totalFinal: liquidacion.totalFinal,
+                tipoPrecio: liquidacion.tipoPrecio,
+              };
+              throw errDiscrepancia;
+            }
+
+            // H. Persistencia del Pedido y PedidoItems
+            let clienteIdParaPedido: string | null = cliente ? cliente.id : null;
+
+            if (!clienteIdParaPedido) {
+              let clienteInvitado = await tx.cliente.findFirst({
+                where: { email: 'invitado@steffen.com' },
+              });
+
+              if (!clienteInvitado) {
+                clienteInvitado = await tx.cliente.create({
+                  data: {
+                    nombre: datosInvitado?.nombre?.trim() || 'Cliente Invitado',
+                    apellido: 'Web',
+                    salon: datosInvitado?.salon?.trim() || 'Consumidor Final',
+                    whatsapp: datosInvitado?.telefono?.trim() || '5492230000000',
+                    email: 'invitado@steffen.com',
+                    provincia: datosInvitado?.provincia?.trim() || 'A coordinar',
+                    localidad: datosInvitado?.localidad?.trim() || 'A coordinar',
+                    tipoDeNegocio: 'Consumidor / Salón No Registrado',
+                    estadoCliente: EstadoCliente.PENDIENTE_APROBACION,
+                  },
+                });
+              }
+              clienteIdParaPedido = clienteInvitado.id;
+            }
+
+            const nuevoPedido = await tx.pedido.create({
+              data: {
+                clienteId: clienteIdParaPedido!,
+                estado: EstadoPedido.PEDIDO_RECIBIDO,
+                subtotalPss: liquidacion.subtotalGeneral,
+                descuentoAplicado: liquidacion.descuento.montoDescuento,
+                porcentajeDescuento: liquidacion.descuento.porcentaje,
+                total: liquidacion.totalFinal,
+                items: {
+                  create: liquidacion.itemsValidos.map((i) => ({
+                    productoId: i.productoId || null,
+                    packId: i.packId || null,
+                    variante: i.variante || null,
+                    cantidad: i.cantidad,
+                    precioUnitarioPss: i.precioUnitario,
+                    subtotal: i.subtotal,
+                  })),
+                },
+              },
+            });
+
+            const mensajeWhatsapp = construirMensajeWhatsapp({
+              numeroPedido: nuevoPedido.numeroPedido,
+              cliente,
+              datosInvitado,
+              items: liquidacion.itemsValidos.map((i) => ({
+                tipo: i.tipo,
+                nombre: i.nombre,
+                presentacion: i.presentacion,
+                variante: i.variante || null,
+                productosDetalle: i.productosDetalle,
+                cantidad: i.cantidad,
+                precioUnitarioPss: i.precioUnitario,
+                subtotalItem: i.subtotal,
+              })),
+              subtotalPss: liquidacion.subtotalGeneral,
+              montoDescuento: liquidacion.descuento.montoDescuento,
+              porcentajeDescuento: liquidacion.descuento.porcentaje,
+              etiquetaDescuento: liquidacion.descuento.etiqueta,
               totalFinal: liquidacion.totalFinal,
               tipoPrecio: liquidacion.tipoPrecio,
-            };
-            throw errDiscrepancia;
-          }
-
-          // E. Persistencia del Pedido y PedidoItems
-          let clienteIdParaPedido: string | null = cliente ? cliente.id : null;
-
-          if (!clienteIdParaPedido) {
-            let clienteInvitado = await tx.cliente.findFirst({
-              where: { email: 'invitado@steffen.com' },
             });
 
-            if (!clienteInvitado) {
-              clienteInvitado = await tx.cliente.create({
-                data: {
-                  nombre: datosInvitado?.nombre?.trim() || 'Cliente Invitado',
-                  apellido: 'Web',
-                  salon: datosInvitado?.salon?.trim() || 'Consumidor Final',
-                  whatsapp: datosInvitado?.telefono?.trim() || '5492230000000',
-                  email: 'invitado@steffen.com',
-                  provincia: datosInvitado?.provincia?.trim() || 'A coordinar',
-                  localidad: datosInvitado?.localidad?.trim() || 'A coordinar',
-                  tipoDeNegocio: 'Consumidor / Salón No Registrado',
-                  estadoCliente: EstadoCliente.PENDIENTE_APROBACION,
-                },
-              });
-            }
-            clienteIdParaPedido = clienteInvitado.id;
-          }
-
-          const nuevoPedido = await tx.pedido.create({
-            data: {
-              clienteId: clienteIdParaPedido!,
-              estado: EstadoPedido.PEDIDO_RECIBIDO,
-              subtotalPss: liquidacion.subtotalGeneral,
-              descuentoAplicado: liquidacion.descuento.montoDescuento,
-              porcentajeDescuento: liquidacion.descuento.porcentaje,
-              total: liquidacion.totalFinal,
-              items: {
-                create: liquidacion.itemsValidos.map((i) => ({
-                  productoId: i.productoId || null,
-                  packId: i.packId || null,
-                  variante: i.variante || null,
-                  cantidad: i.cantidad,
-                  precioUnitarioPss: i.precioUnitario,
-                  subtotal: i.subtotal,
-                })),
+            await tx.pedido.update({
+              where: { id: nuevoPedido.id },
+              data: {
+                mensajeWhatsappGenerado: mensajeWhatsapp,
               },
-            },
-          });
+            });
 
-          const mensajeWhatsapp = construirMensajeWhatsapp({
-            numeroPedido: nuevoPedido.numeroPedido,
-            cliente,
-            datosInvitado,
-            items: liquidacion.itemsValidos.map((i) => ({
-              tipo: i.tipo,
-              nombre: i.nombre,
-              presentacion: i.presentacion,
-              variante: i.variante || null,
-              productosDetalle: i.productosDetalle,
-              cantidad: i.cantidad,
-              precioUnitarioPss: i.precioUnitario,
-              subtotalItem: i.subtotal,
-            })),
-            subtotalPss: liquidacion.subtotalGeneral,
-            montoDescuento: liquidacion.descuento.montoDescuento,
-            porcentajeDescuento: liquidacion.descuento.porcentaje,
-            etiquetaDescuento: liquidacion.descuento.etiqueta,
-            totalFinal: liquidacion.totalFinal,
-            tipoPrecio: liquidacion.tipoPrecio,
-          });
+            const whatsappUrl = generarUrlWhatsapp(mensajeWhatsapp, numeroWhatsapp);
+            const resultadoCache: ConfirmarPedidoResultado = {
+              success: true,
+              pedidoId: nuevoPedido.id,
+              numeroPedido: nuevoPedido.numeroPedido,
+              whatsappUrl,
+            };
 
-          return await tx.pedido.update({
-            where: { id: nuevoPedido.id },
-            data: {
-              mensajeWhatsappGenerado: mensajeWhatsapp,
-            },
-          });
-        },
-        {
-          timeout: 10000,
-          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
-        }
-      );
+            // I. Persistencia atómica de RegistroIdempotencia
+            await tx.registroIdempotencia.create({
+              data: {
+                clave: opciones.idempotencyKey!,
+                clienteId: cliente?.id || null,
+                guestSessionId: !cliente ? guestSessionId : null,
+                pedidoId: nuevoPedido.id,
+                payloadHash,
+                resultadoJson: JSON.stringify(resultadoCache),
+              },
+            });
+
+            return resultadoCache;
+          },
+          {
+            timeout: 10000,
+            isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+          }
+        );
+      });
     } catch (errTx: any) {
+      // 1. Verificar primero si otra transacción concurrente completó el pedido para esta misma clave
+      const registroConfirmado = await prisma.registroIdempotencia.findUnique({
+        where: { clave: opciones.idempotencyKey },
+        include: { pedido: true },
+      });
+
+      if (registroConfirmado) {
+        const verifAcceso = validarAccesoIdempotente(registroConfirmado, {
+          clienteId: cliente?.id || null,
+          guestSessionId,
+          payloadHash,
+        });
+
+        if (!verifAcceso.autorizado) {
+          return { success: false, error: verifAcceso.error };
+        }
+
+        if (!cliente && registroConfirmado.pedidoId) {
+          try {
+            await setGuestOrderAuthCookie(registroConfirmado.pedidoId);
+          } catch (e) {
+            console.warn('Error restaurando cookie de invitado:', e);
+          }
+        }
+
+        return reconstruirResultadoDesdePedido(registroConfirmado);
+      }
+
       if (errTx?.esDiscrepanciaCotizacion) {
         return {
           success: false,
@@ -509,23 +644,15 @@ export async function confirmarPedidoAction(
       };
     }
 
-    if (pedidoGuardado) {
-      // Para pedidos de invitados, emitir cookie HttpOnly firmada
-      if (!cliente && pedidoGuardado.id) {
+    if (resultadoFinal && resultadoFinal.success) {
+      if (!cliente && resultadoFinal.pedidoId) {
         try {
-          await setGuestOrderAuthCookie(pedidoGuardado.id);
+          await setGuestOrderAuthCookie(resultadoFinal.pedidoId);
         } catch (cookieErr) {
           console.warn('No se pudo establecer la cookie de autorización de invitado:', cookieErr);
         }
       }
-
-      const whatsappUrl = generarUrlWhatsapp(pedidoGuardado.mensajeWhatsappGenerado || '', numeroWhatsapp);
-      return {
-        success: true,
-        pedidoId: pedidoGuardado.id,
-        numeroPedido: pedidoGuardado.numeroPedido,
-        whatsappUrl,
-      };
+      return resultadoFinal;
     }
 
     return {
