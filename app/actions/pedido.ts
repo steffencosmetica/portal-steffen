@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { obtenerSesionCliente } from '@/lib/services/session';
 import { liquidarCarrito } from '@/lib/services/liquidacion';
 import { obtenerNumeroWhatsappOFallar, generarUrlWhatsapp, ConfiguracionWhatsappError } from '@/lib/whatsapp';
-import { EstadoCliente, EstadoPedido } from '@prisma/client';
+import { Prisma, EstadoCliente, EstadoPedido } from '@prisma/client';
 import { TipoItemCarrito } from '@/lib/types/carrito';
 import { setGuestOrderAuthCookie } from '@/lib/security/guestOrderAuth';
 import {
@@ -322,10 +322,29 @@ export async function confirmarPedidoAction(
 
           // B. Bloqueo transaccional exclusivo por cliente registrado (coordinado en PostgreSQL)
           if (cliente?.id) {
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('steffen_cliente_pedido'), hashtext(${cliente.id}))`;
+            await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('steffen_cliente_pedido'), hashtext(${cliente.id}))::text AS lock`;
+            // Bloqueo compartido del registro del cliente para evitar modificaciones concurrentes de estado/distribuidor
+            await tx.$queryRaw`SELECT id FROM clientes WHERE id = ${cliente.id} FOR SHARE`;
           }
 
-          // C. Liquidar el carrito con datos frescos dentro de la transacción
+          // C. Bloqueo compartido selectivo (FOR SHARE) exclusivamente sobre los productos y packs del pedido
+          // Garantiza consistencia contra modificaciones concurrentes del catálogo por el administrador
+          // sin bloquear todo el catálogo ni impedir compras concurrentes de otros usuarios
+          const productosIds = Array.from(
+            new Set(itemsCliente.filter((i) => i.tipo === 'PRODUCTO').map((i) => i.id))
+          );
+          if (productosIds.length > 0) {
+            await tx.$queryRaw`SELECT id FROM productos WHERE id IN (${Prisma.join(productosIds)}) FOR SHARE`;
+          }
+
+          const packsIds = Array.from(
+            new Set(itemsCliente.filter((i) => i.tipo === 'PACK').map((i) => i.id))
+          );
+          if (packsIds.length > 0) {
+            await tx.$queryRaw`SELECT id FROM packs WHERE id IN (${Prisma.join(packsIds)}) FOR SHARE`;
+          }
+
+          // D. Liquidar el carrito con datos frescos dentro de la transacción
           const liquidacion = await liquidarCarrito(itemsCliente, cliente, {
             modo: 'CONFIRMACION',
             prismaClient: tx,
@@ -452,6 +471,7 @@ export async function confirmarPedidoAction(
         },
         {
           timeout: 10000,
+          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
         }
       );
     } catch (errTx: any) {
