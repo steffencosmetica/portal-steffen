@@ -213,32 +213,36 @@ export async function confirmarPedidoAction(
     }
 
     // 1. Obtener cliente autenticado en el servidor (opcional: usuarios invitados pueden comprar sin login)
-    const supabase = await createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
     let cliente: any = null;
+    try {
+      const supabase = await createServerSupabaseClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (user) {
-      const usuario = await prisma.usuario.findUnique({
-        where: { authUserId: user.id },
-        include: {
-          cliente: {
-            include: { zona: true },
+      if (user) {
+        const usuario = await prisma.usuario.findUnique({
+          where: { authUserId: user.id },
+          include: {
+            cliente: {
+              include: { zona: true },
+            },
           },
-        },
-      });
+        });
 
-      if (usuario?.cliente) {
-        cliente = usuario.cliente;
-        if (cliente.estadoCliente === EstadoCliente.BLOQUEADO) {
-          return {
-            success: false,
-            error: 'Tu cuenta profesional se encuentra bloqueada por administración. No es posible confirmar pedidos.',
-          };
+        if (usuario?.cliente) {
+          cliente = usuario.cliente;
+          if (cliente.estadoCliente === EstadoCliente.BLOQUEADO) {
+            return {
+              success: false,
+              error: 'Tu cuenta profesional se encuentra bloqueada por administración. No es posible confirmar pedidos.',
+            };
+          }
         }
       }
+    } catch (authError) {
+      // Si cookies() no está disponible o falla la lectura de sesión, continuar como invitado
+      cliente = null;
     }
 
     // Si el usuario no está autenticado como cliente profesional, los datos de contacto son obligatorios
@@ -282,6 +286,21 @@ export async function confirmarPedidoAction(
     // 3. Separar productos y packs
     const productosItems = itemsCliente.filter((i) => i.tipo === 'PRODUCTO');
     const packsItems = itemsCliente.filter((i) => i.tipo === 'PACK');
+
+    // Validación estricta de permisos de Packs en el Servidor:
+    // Los packs exclusivos son para salones profesionales con cuenta ACTIVO.
+    // Invitados y profesionales PENDIENTE_APROBACION, INACTIVO o BLOQUEADO no pueden comprar packs exclusivos.
+    if (packsItems.length > 0) {
+      const esClienteActivo = Boolean(cliente && cliente.estadoCliente === EstadoCliente.ACTIVO);
+      if (!esClienteActivo) {
+        return {
+          success: false,
+          error:
+            'Los packs y combos profesionales son exclusivos para salones profesionales con cuenta activa. Por favor quitá los packs de tu pedido para continuar con la compra de productos individuales o solicitá la aprobación de tu salón.',
+          itemsRemovidosIds: packsItems.map((p) => p.id),
+        };
+      }
+    }
 
     const productosIds = productosItems.map((i) => i.id);
     const productosDB = (productosIds.length > 0

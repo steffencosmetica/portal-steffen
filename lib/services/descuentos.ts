@@ -17,139 +17,67 @@ export interface CalculoDescuentoResultado {
 }
 
 let reglasSincronizadas = false;
+let inicializacionPromise: Promise<void> | null = null;
 
 /**
- * Asegura que existan las reglas de descuento base en caso de que la tabla esté vacía
- * o actualiza las existentes a las nuevas condiciones oficiales:
- * - Primer Pedido: 20% OFF
- * - Reposición 0 a 40 días: 25% OFF
- * - Reposición 41 a 55 días: 15% OFF (15 días posteriores)
- * - > 55 días: Sin beneficio (0%)
+ * Asegura que existan las reglas de descuento base en caso de que la tabla esté completamente vacía.
+ * Si ya existen reglas configuradas, NO modifica, inserta, sobreescribe ni reactiva ninguna regla,
+ * preservando fielmente los valores configurados por el administrador en la base de datos.
+ *
+ * Utiliza un lock consultivo de transacción de PostgreSQL (pg_advisory_xact_lock) para garantizar
+ * inicialización idempotente y segura ante peticiones concurrentes de múltiples instancias.
  */
 export async function inicializarReglasSiEstanVacias() {
   if (reglasSincronizadas) return;
-  try {
-    const conteo = await prisma.reglaDeDescuento.count({
-      where: { activa: true },
-    });
-    if (conteo === 0) {
-      await prisma.reglaDeDescuento.createMany({
-        data: [
-          {
-            tipo: TipoDescuento.PRIMER_PEDIDO,
-            porcentaje: 20,
-            activa: true,
-            orden: 1,
-          },
-          {
-            tipo: TipoDescuento.REPOSICION,
-            diasDesde: 0,
-            diasHasta: 40,
-            porcentaje: 25,
-            activa: true,
-            orden: 2,
-          },
-          {
-            tipo: TipoDescuento.REPOSICION,
-            diasDesde: 41,
-            diasHasta: 55,
-            porcentaje: 15,
-            activa: true,
-            orden: 3,
-          },
-        ],
-      });
-      console.log('Reglas de descuento iniciales creadas en base de datos.');
-    } else {
-      // Sincronizar condiciones oficiales:
-      // 1. Primer Pedido -> 20%
-      await prisma.reglaDeDescuento.updateMany({
-        where: {
-          tipo: TipoDescuento.PRIMER_PEDIDO,
-          porcentaje: { not: 20 },
-        },
-        data: {
-          porcentaje: 20,
-        },
-      });
 
-      // 2. Reposición Tramo 1: 0 a 40 días -> 25% OFF
-      const reglasRepo0 = await prisma.reglaDeDescuento.findFirst({
-        where: {
-          tipo: TipoDescuento.REPOSICION,
-          diasDesde: 0,
-        },
-      });
+  if (!inicializacionPromise) {
+    inicializacionPromise = (async () => {
+      try {
+        await prisma.$transaction(async (tx) => {
+          // Lock consultivo de PostgreSQL para serializar ejecuciones concurrentes entre múltiples instancias
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(749281)`;
 
-      if (reglasRepo0) {
-        await prisma.reglaDeDescuento.update({
-          where: { id: reglasRepo0.id },
-          data: {
-            diasDesde: 0,
-            diasHasta: 40,
-            porcentaje: 25,
-            activa: true,
-          },
+          const total = await tx.reglaDeDescuento.count();
+          if (total === 0) {
+            await tx.reglaDeDescuento.createMany({
+              data: [
+                {
+                  tipo: TipoDescuento.PRIMER_PEDIDO,
+                  porcentaje: 20,
+                  activa: true,
+                  orden: 1,
+                },
+                {
+                  tipo: TipoDescuento.REPOSICION,
+                  diasDesde: 0,
+                  diasHasta: 40,
+                  porcentaje: 25,
+                  activa: true,
+                  orden: 2,
+                },
+                {
+                  tipo: TipoDescuento.REPOSICION,
+                  diasDesde: 41,
+                  diasHasta: 55,
+                  porcentaje: 15,
+                  activa: true,
+                  orden: 3,
+                },
+              ],
+            });
+            console.log('Reglas de descuento iniciales creadas en base de datos.');
+          }
         });
-      } else {
-        await prisma.reglaDeDescuento.create({
-          data: {
-            tipo: TipoDescuento.REPOSICION,
-            diasDesde: 0,
-            diasHasta: 40,
-            porcentaje: 25,
-            activa: true,
-            orden: 2,
-          },
-        });
+        reglasSincronizadas = true;
+      } catch (error) {
+        console.error('Error al inicializar reglas de descuento:', error);
+      } finally {
+        inicializacionPromise = null;
       }
-
-      // 3. Reposición Tramo 2: 41 a 55 días (15 días posteriores) -> 15% OFF
-      const reglasRepoPosterior = await prisma.reglaDeDescuento.findFirst({
-        where: {
-          tipo: TipoDescuento.REPOSICION,
-          diasDesde: { gt: 0 },
-        },
-      });
-
-      if (reglasRepoPosterior) {
-        await prisma.reglaDeDescuento.update({
-          where: { id: reglasRepoPosterior.id },
-          data: {
-            diasDesde: 41,
-            diasHasta: 55,
-            porcentaje: 15,
-            activa: true,
-          },
-        });
-      } else {
-        await prisma.reglaDeDescuento.create({
-          data: {
-            tipo: TipoDescuento.REPOSICION,
-            diasDesde: 41,
-            diasHasta: 55,
-            porcentaje: 15,
-            activa: true,
-            orden: 3,
-          },
-        });
-      }
-
-      // Desactivar cualquier regla de reposición redundante con diasDesde > 55
-      await prisma.reglaDeDescuento.updateMany({
-        where: {
-          tipo: TipoDescuento.REPOSICION,
-          diasDesde: { gt: 41 },
-        },
-        data: {
-          activa: false,
-        },
-      });
-    }
-    reglasSincronizadas = true;
-  } catch (error) {
-    console.error('Error al inicializar/sincronizar reglas de descuento:', error);
+    })();
   }
+
+  await inicializacionPromise;
 }
 
 /**
