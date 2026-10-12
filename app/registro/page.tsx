@@ -653,6 +653,10 @@ export default function RegistroPage() {
                 </div>
               </div>
 
+              {/* Campos opcionales de coordenadas para interoperabilidad de geocodificación */}
+              <input type="hidden" name="latitud" id="input-registro-latitud" />
+              <input type="hidden" name="longitud" id="input-registro-longitud" />
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-neutral-700 mb-1.5" htmlFor="instagram">

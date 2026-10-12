@@ -6,7 +6,8 @@
 import { createServerSupabaseClient, createAdminSupabaseClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import { Rol, EstadoCliente } from '@prisma/client';
-import { encontrarZonaMasCercana, RADIO_COBERTURA_DISTRIBUIDOR_KM } from '@/lib/services/geolocalizacion';
+import { encontrarZonaMasCercana, calcularDistanciaHaversineKm, RADIO_COBERTURA_DISTRIBUIDOR_KM } from '@/lib/services/geolocalizacion';
+import { geocodificarUbicacion, esCoordenadaValidaArgentina, ResultadoGeocodificacion } from '@/lib/services/geocoding';
 import { headers } from 'next/headers';
 
 export interface RegistroFormState {
@@ -40,6 +41,7 @@ export async function registroProfesionalAction(
     const apellido = (formData.get('apellido') as string)?.trim();
     const salon = (formData.get('salon') as string)?.trim();
     const whatsapp = (formData.get('whatsapp') as string)?.trim();
+    const direccion = (formData.get('direccion') as string)?.trim() || '';
     const provincia = (formData.get('provincia') as string)?.trim();
     const localidad = (formData.get('localidad') as string)?.trim();
     const pais = (formData.get('pais') as string)?.trim() || 'Argentina';
@@ -111,20 +113,81 @@ export async function registroProfesionalAction(
 
     // 2. Transacción en Prisma para crear Usuario y Cliente
     try {
-      // Determinar la zona asignada:
-      // Si se proporcionaron coordenadas válidas, buscar la zona más cercana con distribuidor activo (radio <= 50 km)
-      // Si no se proporcionaron coordenadas o queda fuera de los 50 km, asignar zonaId = null (SIN DISTRIBUIDOR)
+      // 2. Determinar coordenadas geográficas y zona asignada con geocodificación del servidor:
+      let latitudFinal: number | null = null;
+      let longitudFinal: number | null = null;
       let zonaAsignadaId: string | null = null;
 
-      if (latitud !== null && longitud !== null) {
-        const zonaCercana = await encontrarZonaMasCercana(latitud, longitud, RADIO_COBERTURA_DISTRIBUIDOR_KM);
+      // Intentar geocodificación del lado del servidor para resolver la ubicación declarada
+      let geoResultado: ResultadoGeocodificacion | null = null;
+      try {
+        geoResultado = await geocodificarUbicacion({
+          direccion,
+          localidad,
+          provincia,
+        });
+      } catch (geoErr) {
+        console.warn('Geocodificación falló o excedió timeout durante registro:', geoErr);
+        geoResultado = null;
+      }
+
+      // Validación de seguridad de coordenadas del navegador vs servidor
+      const navValidoEnArg =
+        latitud !== null &&
+        longitud !== null &&
+        esCoordenadaValidaArgentina(latitud, longitud);
+
+      if (navValidoEnArg) {
+        if (geoResultado && geoResultado.esConfiable) {
+          // Si el navegador envió coordenadas, comprobar consistencia con la geocodificación del servidor
+          const distNavServer = calcularDistanciaHaversineKm(
+            latitud!,
+            longitud!,
+            geoResultado.lat,
+            geoResultado.lng
+          );
+          if (distNavServer <= 50) {
+            // Consistente con la localidad declarada
+            latitudFinal = latitud;
+            longitudFinal = longitud;
+          } else {
+            // Coordenadas manipuladas o inconsistentes: usar las coordenadas verificadas del servidor
+            latitudFinal = geoResultado.lat;
+            longitudFinal = geoResultado.lng;
+          }
+        } else {
+          // Coordenadas del navegador válidas en Argentina sin confirmación del servidor
+          latitudFinal = latitud;
+          longitudFinal = longitud;
+        }
+      } else if (geoResultado && geoResultado.esConfiable) {
+        // Coordenadas resueltas confiablemente por el servidor
+        latitudFinal = geoResultado.lat;
+        longitudFinal = geoResultado.lng;
+      }
+
+      // Asignar distribuidor si la ubicación es confiable
+      // REGLA COMERCIAL: Solo asignar distribuidor si:
+      // a) Existen coordenadas válidas
+      // b) La precisión no es meramente PROVINCIA ni ambigua (es DIRECCION o LOCALIDAD verificada)
+      // c) Está dentro del radio de 50 km de un distribuidor ACTIVO
+      const ubicacionConfiableParaDistribuidor =
+        latitudFinal !== null &&
+        longitudFinal !== null &&
+        (!geoResultado || (geoResultado.esConfiable && geoResultado.precision !== 'PROVINCIA'));
+
+      if (ubicacionConfiableParaDistribuidor) {
+        const zonaCercana = await encontrarZonaMasCercana(
+          latitudFinal!,
+          longitudFinal!,
+          RADIO_COBERTURA_DISTRIBUIDOR_KM
+        );
         if (zonaCercana) {
           zonaAsignadaId = zonaCercana.id;
         }
       }
 
       await prisma.$transaction(async (tx) => {
-
         // Crear Usuario interno
         const usuario = await tx.usuario.create({
           data: {
@@ -146,8 +209,8 @@ export async function registroProfesionalAction(
             provincia,
             localidad,
             pais,
-            latitud,
-            longitud,
+            latitud: latitudFinal,
+            longitud: longitudFinal,
             instagram,
             cuit,
             tipoDeNegocio,
