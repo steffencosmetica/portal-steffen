@@ -1,14 +1,11 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { createServerSupabaseClient } from '@/lib/supabase/server';
-import { determinarPrecioVisible } from '@/lib/services/precios';
-import { calcularDescuentoParaCliente } from '@/lib/services/descuentos';
-import { calcularDisponibilidadPack, obtenerPrecioPackParaCliente } from '@/lib/services/packs';
+import { obtenerSesionCliente } from '@/lib/services/session';
+import { liquidarCarrito } from '@/lib/services/liquidacion';
 import { obtenerNumeroWhatsappOFallar, generarUrlWhatsapp, ConfiguracionWhatsappError } from '@/lib/whatsapp';
 import { EstadoCliente, EstadoPedido } from '@prisma/client';
 import { TipoItemCarrito } from '@/lib/types/carrito';
-import { parsearVariantes, obtenerPreciosEfectivosProducto } from '@/lib/utils/variantes';
 import { setGuestOrderAuthCookie } from '@/lib/security/guestOrderAuth';
 
 export interface ConfirmarPedidoItemInput {
@@ -26,6 +23,10 @@ export interface DatosInvitadoInput {
   provincia?: string;
 }
 
+export interface OpcionesConfirmacionPedido {
+  totalEsperado?: number;
+}
+
 export interface ConfirmarPedidoResultado {
   success: boolean;
   error?: string;
@@ -33,6 +34,7 @@ export interface ConfirmarPedidoResultado {
   pedidoId?: string;
   numeroPedido?: number;
   whatsappUrl?: string;
+  totalActualizado?: number;
 }
 
 /**
@@ -187,16 +189,18 @@ function construirMensajeWhatsapp(params: {
 
 /**
  * Server Action que procesa la confirmación del pedido:
- * 1. Admite tanto usuarios logueados como usuarios invitados sin sesión.
+ * 1. Admite tanto usuarios profesionales logueados como usuarios invitados sin sesión.
  * 2. Valida formato estricto de ítems y cantidades enteras > 0.
- * 3. Re-consulta productos y packs frescos de la base de datos, validando vigencia y stock de packs.
- * 4. Aplica determinarPrecioVisible() en productos y precioPromocional en packs.
- * 5. Guarda atómicamente el Pedido y sus PedidoItem en PostgreSQL si es posible.
- * 6. Genera la URL oficial de WhatsApp con el pedido.
+ * 3. Delega la validación comercial y de catálogo en el motor central liquidarCarrito({ modo: 'CONFIRMACION' }).
+ * 4. Valida consistencia de importes si el cliente envía totalEsperado (prevención de cambios silenciosos).
+ * 5. Guarda atómicamente el Pedido y sus PedidoItem en PostgreSQL mediante transacción.
+ * 6. Genera el mensaje oficial y la URL de WhatsApp.
+ * 7. Para pedidos de invitados, firma y establece la cookie de autorización HttpOnly.
  */
 export async function confirmarPedidoAction(
   itemsCliente: ConfirmarPedidoItemInput[],
-  datosInvitado?: DatosInvitadoInput
+  datosInvitado?: DatosInvitadoInput,
+  opciones?: OpcionesConfirmacionPedido
 ): Promise<ConfirmarPedidoResultado> {
   try {
     let numeroWhatsapp: string;
@@ -215,33 +219,17 @@ export async function confirmarPedidoAction(
     // 1. Obtener cliente autenticado en el servidor (opcional: usuarios invitados pueden comprar sin login)
     let cliente: any = null;
     try {
-      const supabase = await createServerSupabaseClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        const usuario = await prisma.usuario.findUnique({
-          where: { authUserId: user.id },
-          include: {
-            cliente: {
-              include: { zona: true },
-            },
-          },
-        });
-
-        if (usuario?.cliente) {
-          cliente = usuario.cliente;
-          if (cliente.estadoCliente === EstadoCliente.BLOQUEADO) {
-            return {
-              success: false,
-              error: 'Tu cuenta profesional se encuentra bloqueada por administración. No es posible confirmar pedidos.',
-            };
-          }
+      const sesion = await obtenerSesionCliente();
+      if (sesion?.cliente) {
+        cliente = sesion.cliente;
+        if (cliente.estadoCliente === EstadoCliente.BLOQUEADO) {
+          return {
+            success: false,
+            error: 'Tu cuenta profesional se encuentra bloqueada por administración. No es posible confirmar pedidos.',
+          };
         }
       }
     } catch (authError) {
-      // Si cookies() no está disponible o falla la lectura de sesión, continuar como invitado
       cliente = null;
     }
 
@@ -259,7 +247,7 @@ export async function confirmarPedidoAction(
       }
     }
 
-    // 2. Validar que la lista de ítems no esté vacía
+    // 2. Validar que la lista de ítems no esté vacía y contenga datos válidos
     if (!itemsCliente || !Array.isArray(itemsCliente) || itemsCliente.length === 0) {
       return {
         success: false,
@@ -283,164 +271,40 @@ export async function confirmarPedidoAction(
       }
     }
 
-    // 3. Separar productos y packs
-    const productosItems = itemsCliente.filter((i) => i.tipo === 'PRODUCTO');
-    const packsItems = itemsCliente.filter((i) => i.tipo === 'PACK');
+    // 3. Liquidar el pedido mediante el motor comercial central en modo CONFIRMACION
+    const liquidacion = await liquidarCarrito(itemsCliente, cliente, { modo: 'CONFIRMACION' });
 
-    // Validación estricta de permisos de Packs en el Servidor:
-    // Los packs exclusivos son para salones profesionales con cuenta ACTIVO.
-    // Invitados y profesionales PENDIENTE_APROBACION, INACTIVO o BLOQUEADO no pueden comprar packs exclusivos.
-    if (packsItems.length > 0) {
-      const esClienteActivo = Boolean(cliente && cliente.estadoCliente === EstadoCliente.ACTIVO);
-      if (!esClienteActivo) {
+    if (!liquidacion.esValidoParaConfirmar) {
+      return {
+        success: false,
+        error:
+          liquidacion.errorConfirmacion ||
+          'Uno o más productos o packs de tu pedido ya no están disponibles en el catálogo. Hemos actualizado tu carrito para que puedas revisarlo.',
+        itemsRemovidosIds: liquidacion.itemsRemovidosIds.map((it) => it.id),
+      };
+    }
+
+    if (liquidacion.itemsValidos.length === 0) {
+      return {
+        success: false,
+        error: 'El carrito está vacío o no contiene productos válidos para confirmar.',
+        itemsRemovidosIds: liquidacion.itemsRemovidosIds.map((it) => it.id),
+      };
+    }
+
+    // 4. Verificación de discrepancia de importes respecto a lo visualizado previamente
+    if (opciones?.totalEsperado !== undefined) {
+      const diferencia = Math.abs(opciones.totalEsperado - liquidacion.totalFinal);
+      if (diferencia > 0.01) {
         return {
           success: false,
-          error:
-            'Los packs y combos profesionales son exclusivos para salones profesionales con cuenta activa. Por favor quitá los packs de tu pedido para continuar con la compra de productos individuales o solicitá la aprobación de tu salón.',
-          itemsRemovidosIds: packsItems.map((p) => p.id),
+          error: `Los precios o descuentos de tu carrito se han actualizado. Total anterior: ${formatoMoneda(opciones.totalEsperado)}, nuevo total: ${formatoMoneda(liquidacion.totalFinal)}. Por favor revisá tu carrito antes de confirmar.`,
+          totalActualizado: liquidacion.totalFinal,
         };
       }
     }
 
-    const productosIds = productosItems.map((i) => i.id);
-    const productosDB = (productosIds.length > 0
-      ? await prisma.producto.findMany({
-          where: { id: { in: productosIds } },
-        })
-      : []) as any[];
-    const productosMap = new Map(productosDB.map((p) => [p.id, p]));
-
-    const itemsRemovidos: string[] = [];
-
-    // Validar productos sueltos
-    for (const item of productosItems) {
-      const prod = productosMap.get(item.id);
-      if (!prod || !prod.activo) {
-        itemsRemovidos.push(item.id);
-      }
-    }
-
-    // Validar packs
-    const packsProcesadosMap = new Map<string, { pack: any; precioPromo: number; detalle: string }>();
-
-    for (const item of packsItems) {
-      const resDisp = await calcularDisponibilidadPack(item.id);
-      if (!resDisp.disponible || !resDisp.pack) {
-        itemsRemovidos.push(item.id);
-      } else {
-        const p = resDisp.pack;
-        const detalle = p.items && p.items.length > 0
-          ? p.items.map((pi) => `${pi.cantidad}x ${pi.producto.nombre}`).join(' + ')
-          : p.descripcion;
-        const precioEfectivoPack = obtenerPrecioPackParaCliente(p, cliente).precioFinal;
-
-        packsProcesadosMap.set(p.id, {
-          pack: p,
-          precioPromo: precioEfectivoPack,
-          detalle,
-        });
-      }
-    }
-
-    if (itemsRemovidos.length > 0) {
-      return {
-        success: false,
-        error:
-          'Uno o más productos o packs de tu pedido ya no están disponibles en el catálogo. Hemos actualizado tu carrito para que puedas revisarlo.',
-        itemsRemovidosIds: itemsRemovidos,
-      };
-    }
-
-    // 4. Calcular precios y subtotales
-    let subtotalProductos = 0;
-    let subtotalPacks = 0;
-    const tipoPrecioGeneral: 'PUBLICO' | 'PROFESIONAL' =
-      cliente?.estadoCliente === 'ACTIVO' ? 'PROFESIONAL' : 'PUBLICO';
-
-    const itemsProcesadosFinales: Array<{
-      tipo: TipoItemCarrito;
-      productoId: string | null;
-      packId: string | null;
-      nombre: string;
-      presentacion: string;
-      variante?: string | null;
-      productosDetalle?: string;
-      cantidad: number;
-      precioUnitarioPss: number;
-      subtotalItem: number;
-    }> = [];
-
-    // Procesar productos
-    for (const item of productosItems) {
-      const prod = productosMap.get(item.id)!;
-      const { precioPss: precioPssEfectivo, precioEcommerce: precioEcomEfectivo } =
-        obtenerPreciosEfectivosProducto(
-          {
-            precioPss: Number(prod.precioPss),
-            precioEcommerce: Number(prod.precioEcommerce),
-            variantes: parsearVariantes(prod.variantes),
-          },
-          item.variante
-        );
-
-      const { precio } = determinarPrecioVisible(cliente, {
-        precioPss: precioPssEfectivo,
-        precioEcommerce: precioEcomEfectivo,
-      });
-
-      const subtotalItem = precio * item.cantidad;
-      subtotalProductos += subtotalItem;
-
-      itemsProcesadosFinales.push({
-        tipo: 'PRODUCTO',
-        productoId: prod.id,
-        packId: null,
-        nombre: prod.nombre,
-        presentacion: prod.presentacion,
-        variante: item.variante ? item.variante.trim() : null,
-        cantidad: item.cantidad,
-        precioUnitarioPss: precio,
-        subtotalItem,
-      });
-    }
-
-    // Procesar packs
-    for (const item of packsItems) {
-      const { pack, precioPromo, detalle } = packsProcesadosMap.get(item.id)!;
-      const subtotalItem = precioPromo * item.cantidad;
-      subtotalPacks += subtotalItem;
-
-      itemsProcesadosFinales.push({
-        tipo: 'PACK',
-        productoId: null,
-        packId: pack.id,
-        nombre: pack.nombre,
-        presentacion: 'Combo Promocional',
-        variante: null,
-        productosDetalle: detalle,
-        cantidad: item.cantidad,
-        precioUnitarioPss: precioPromo,
-        subtotalItem,
-      });
-    }
-
-    const subtotalCalculado = subtotalProductos + subtotalPacks;
-
-    // 5. Liquidar Descuentos: El descuento por reposición/primer pedido aplica a clientes registrados
-    let montoDescuento = 0;
-    let porcentajeDescuento = 0;
-    let totalFinal = subtotalCalculado;
-    let etiquetaDescuento = 'Sin descuento';
-
-    if (cliente && subtotalProductos > 0) {
-      const descuento = await calcularDescuentoParaCliente(cliente.id, subtotalProductos);
-      montoDescuento = descuento.montoDescuento;
-      porcentajeDescuento = descuento.porcentaje;
-      totalFinal = (subtotalProductos - montoDescuento) + subtotalPacks;
-      etiquetaDescuento = descuento.etiqueta;
-    }
-
-    // 6. Determinar o preparar cliente para persistencia en base de datos
+    // 5. Determinar o preparar cliente para persistencia en base de datos
     let clienteIdParaPedido: string | null = cliente ? cliente.id : null;
 
     if (!clienteIdParaPedido) {
@@ -470,7 +334,7 @@ export async function confirmarPedidoAction(
       }
     }
 
-    // 7. Si hay clienteId, persistir Pedido y PedidoItems en PostgreSQL
+    // 6. Si hay clienteId, persistir Pedido y PedidoItems en PostgreSQL
     let pedidoGuardado: any = null;
 
     if (clienteIdParaPedido) {
@@ -480,18 +344,18 @@ export async function confirmarPedidoAction(
             data: {
               clienteId: clienteIdParaPedido!,
               estado: EstadoPedido.PEDIDO_RECIBIDO,
-              subtotalPss: subtotalCalculado,
-              descuentoAplicado: montoDescuento,
-              porcentajeDescuento: porcentajeDescuento,
-              total: totalFinal,
+              subtotalPss: liquidacion.subtotalGeneral,
+              descuentoAplicado: liquidacion.descuento.montoDescuento,
+              porcentajeDescuento: liquidacion.descuento.porcentaje,
+              total: liquidacion.totalFinal,
               items: {
-                create: itemsProcesadosFinales.map((i) => ({
-                  productoId: i.productoId,
-                  packId: i.packId,
+                create: liquidacion.itemsValidos.map((i) => ({
+                  productoId: i.productoId || null,
+                  packId: i.packId || null,
                   variante: i.variante || null,
                   cantidad: i.cantidad,
-                  precioUnitarioPss: i.precioUnitarioPss,
-                  subtotal: i.subtotalItem,
+                  precioUnitarioPss: i.precioUnitario,
+                  subtotal: i.subtotal,
                 })),
               },
             },
@@ -501,13 +365,22 @@ export async function confirmarPedidoAction(
             numeroPedido: nuevoPedido.numeroPedido,
             cliente,
             datosInvitado,
-            items: itemsProcesadosFinales,
-            subtotalPss: subtotalCalculado,
-            montoDescuento,
-            porcentajeDescuento,
-            etiquetaDescuento,
-            totalFinal,
-            tipoPrecio: tipoPrecioGeneral,
+            items: liquidacion.itemsValidos.map((i) => ({
+              tipo: i.tipo,
+              nombre: i.nombre,
+              presentacion: i.presentacion,
+              variante: i.variante || null,
+              productosDetalle: i.productosDetalle,
+              cantidad: i.cantidad,
+              precioUnitarioPss: i.precioUnitario,
+              subtotalItem: i.subtotal,
+            })),
+            subtotalPss: liquidacion.subtotalGeneral,
+            montoDescuento: liquidacion.descuento.montoDescuento,
+            porcentajeDescuento: liquidacion.descuento.porcentaje,
+            etiquetaDescuento: liquidacion.descuento.etiqueta,
+            totalFinal: liquidacion.totalFinal,
+            tipoPrecio: liquidacion.tipoPrecio,
           });
 
           return await tx.pedido.update({
@@ -545,15 +418,24 @@ export async function confirmarPedidoAction(
     const numeroPedidoFallback = Math.floor(100000 + Math.random() * 900000);
     const mensajeFallback = construirMensajeWhatsapp({
       numeroPedido: numeroPedidoFallback,
-      cliente: null,
+      cliente,
       datosInvitado,
-      items: itemsProcesadosFinales,
-      subtotalPss: subtotalCalculado,
-      montoDescuento,
-      porcentajeDescuento,
-      etiquetaDescuento,
-      totalFinal,
-      tipoPrecio: tipoPrecioGeneral,
+      items: liquidacion.itemsValidos.map((i) => ({
+        tipo: i.tipo,
+        nombre: i.nombre,
+        presentacion: i.presentacion,
+        variante: i.variante || null,
+        productosDetalle: i.productosDetalle,
+        cantidad: i.cantidad,
+        precioUnitarioPss: i.precioUnitario,
+        subtotalItem: i.subtotal,
+      })),
+      subtotalPss: liquidacion.subtotalGeneral,
+      montoDescuento: liquidacion.descuento.montoDescuento,
+      porcentajeDescuento: liquidacion.descuento.porcentaje,
+      etiquetaDescuento: liquidacion.descuento.etiqueta,
+      totalFinal: liquidacion.totalFinal,
+      tipoPrecio: liquidacion.tipoPrecio,
     });
     const whatsappUrlFallback = generarUrlWhatsapp(mensajeFallback, numeroWhatsapp);
 
