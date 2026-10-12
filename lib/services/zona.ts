@@ -7,43 +7,29 @@ export interface EvaluacionZonaResult {
   mensajeInformativo: string;
 }
 
+/**
+ * Evalúa las condiciones comerciales según la zona geográfica.
+ * En el nuevo sistema de distribución:
+ * - Solo 'CON_DISTRIBUIDOR' deriva al distribuidor oficial exclusivo.
+ * - 'SIN_DISTRIBUIDOR', 'COBERTURA_PARCIAL' (en desuso comercial), null o indefinido
+ *   habilitan la compra directa de fábrica con beneficios profesionales.
+ */
 export function evaluarAccesoZona(estadoZona?: EstadoZonaType | null): EvaluacionZonaResult {
-  const estado = estadoZona || 'SIN_DISTRIBUIDOR';
-
-  switch (estado) {
-    case 'SIN_DISTRIBUIDOR':
-      return {
-        estado: 'SIN_DISTRIBUIDOR',
-        permiteCompraDirectaFabrica: true,
-        requiereContactoDistribuidor: false,
-        mensajeInformativo:
-          '¡Tu salón se encuentra en una zona con atención directa de fábrica Steffen! Accedés a precios profesionales y beneficios exclusivos.',
-      };
-
-    case 'COBERTURA_PARCIAL':
-      return {
-        estado: 'COBERTURA_PARCIAL',
-        permiteCompraDirectaFabrica: true,
-        requiereContactoDistribuidor: false,
-        mensajeInformativo:
-          'Tu zona cuenta con cobertura compartida. Podés realizar tu pedido directo por este portal oficial o solicitar contacto de distribuidor de zona.',
-      };
-
-    case 'CON_DISTRIBUIDOR':
-      return {
-        estado: 'CON_DISTRIBUIDOR',
-        permiteCompraDirectaFabrica: false,
-        requiereContactoDistribuidor: true,
-        mensajeInformativo:
-          'Tu localidad cuenta con un distribuidor oficial exclusivo de Steffen. Te derivaremos con tu representante para una atención personalizada y entrega inmediata.',
-      };
-
-    default:
-      return {
-        estado: 'SIN_DISTRIBUIDOR',
-        permiteCompraDirectaFabrica: true,
-        requiereContactoDistribuidor: false,
-        mensajeInformativo: 'Acceso directo de fábrica habilitado.',
-      };
+  if (estadoZona === 'CON_DISTRIBUIDOR') {
+    return {
+      estado: 'CON_DISTRIBUIDOR',
+      permiteCompraDirectaFabrica: false,
+      requiereContactoDistribuidor: true,
+      mensajeInformativo:
+        'Tu localidad cuenta con un distribuidor oficial exclusivo de Steffen. Te derivaremos con tu representante para una atención personalizada y entrega inmediata.',
+    };
   }
+
+  return {
+    estado: estadoZona === 'COBERTURA_PARCIAL' ? 'COBERTURA_PARCIAL' : 'SIN_DISTRIBUIDOR',
+    permiteCompraDirectaFabrica: true,
+    requiereContactoDistribuidor: false,
+    mensajeInformativo:
+      '¡Tu salón se encuentra en una zona con atención directa de fábrica Steffen! Accedés a precios profesionales y beneficios exclusivos.',
+  };
 }

@@ -6,7 +6,8 @@ export type ZonaConDistribuidor = Zona & {
   distanciaKm?: number;
 };
 
-export const RADIO_MAXIMO_KM = 10;
+export const RADIO_COBERTURA_DISTRIBUIDOR_KM = 50;
+export const RADIO_MAXIMO_KM = RADIO_COBERTURA_DISTRIBUIDOR_KM; // Alias para retrocompatibilidad
 
 /**
  * Calcula la distancia ortodrómica en kilómetros entre dos coordenadas geográficas
@@ -37,24 +38,30 @@ export function calcularDistanciaHaversineKm(
 }
 
 /**
- * Busca entre todas las Zonas geolocalizadas la más cercana a las coordenadas provistas.
- * Si la zona más cercana se encuentra a 10 km o menos, se retorna dicha Zona con su Distribuidor.
- * Si ninguna zona está en el radio de 10 km o no hay zonas geolocalizadas, retorna null.
+ * Busca entre todas las Zonas con Distribuidor ACTIVO la más cercana a las coordenadas provistas.
+ * Si la zona más cercana se encuentra dentro del radio de cobertura (por defecto 50 km), se retorna
+ * dicha Zona con su Distribuidor.
+ * Si ninguna zona con distribuidor activo está en el radio o no hay zonas geolocalizadas, retorna null.
+ * En caso de empate exacto de distancia, desempata de manera determinística por id de zona.
  */
 export async function encontrarZonaMasCercana(
   lat: number,
   lng: number,
-  radioMaxKm: number = RADIO_MAXIMO_KM
+  radioMaxKm: number = RADIO_COBERTURA_DISTRIBUIDOR_KM
 ): Promise<ZonaConDistribuidor | null> {
   if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng)) {
     return null;
   }
 
-  // Obtener todas las zonas que tengan coordenadas cargadas
+  // Obtener todas las zonas que tengan coordenadas cargadas Y distribuidor ACTIVO
   const zonasConCoordenadas = await prisma.zona.findMany({
     where: {
       latitud: { not: null },
       longitud: { not: null },
+      distribuidorId: { not: null },
+      distribuidor: {
+        estado: 'ACTIVO',
+      },
     },
     include: {
       distribuidor: true,
@@ -78,7 +85,11 @@ export async function encontrarZonaMasCercana(
       zona.longitud
     );
 
-    if (distancia < menorDistancia) {
+    const esMenor = distancia < menorDistancia;
+    const esEmpate = Math.abs(distancia - menorDistancia) < 1e-6;
+    const ganaPorDesempate = esEmpate && zonaMasCercana !== null && zona.id < zonaMasCercana.id;
+
+    if (esMenor || ganaPorDesempate) {
       menorDistancia = distancia;
       zonaMasCercana = {
         ...zona,
@@ -87,7 +98,7 @@ export async function encontrarZonaMasCercana(
     }
   }
 
-  // Si la zona más cercana está dentro del radio permitido (<= 10km), la retornamos
+  // Si la zona más cercana está dentro del radio permitido (<= 50km), la retornamos
   if (zonaMasCercana && menorDistancia <= radioMaxKm) {
     return zonaMasCercana;
   }
@@ -96,26 +107,41 @@ export async function encontrarZonaMasCercana(
 }
 
 /**
- * Recalcula y actualiza la asignación de zonas para todos los clientes
- * utilizando el radio de 10 km para salones con GPS, o coincidencia de localidad/provincia.
+ * Recalcula y actualiza la asignación de zonas para todos los clientes profesionales.
+ * - Salones con GPS: busca la zona más cercana con distribuidor ACTIVO dentro del radio (50 km).
+ *   Si está a > 50 km o no hay distribuidores activos en rango, asigna zonaId = null (SIN DISTRIBUIDOR).
+ * - Salones SIN GPS: conserva asignaciones manuales existentes si la zona asignada existe y su
+ *   distribuidor está ACTIVO. Si la zona no existe, no tiene distribuidor o su distribuidor está INACTIVO,
+ *   se resetea zonaId = null. No se realiza asignación por coincidencia de texto.
  */
-export async function recalcularAsignacionesZonas(radioKm: number = RADIO_MAXIMO_KM) {
-  const zonas = await prisma.zona.findMany({
+export async function recalcularAsignacionesZonas(radioKm: number = RADIO_COBERTURA_DISTRIBUIDOR_KM) {
+  // 1. Zonas con coordenadas y distribuidor activo
+  const zonasActivasConGps = await prisma.zona.findMany({
+    where: {
+      latitud: { not: null },
+      longitud: { not: null },
+      distribuidorId: { not: null },
+      distribuidor: {
+        estado: 'ACTIVO',
+      },
+    },
     include: {
       distribuidor: true,
     },
   });
 
-  const zonasConGps = zonas.filter(
-    (z) => z.latitud !== null && z.longitud !== null
-  );
+  // 2. Todas las zonas para validar asignaciones previas de clientes sin GPS
+  const todasLasZonas = await prisma.zona.findMany({
+    include: {
+      distribuidor: true,
+    },
+  });
+  const zonasMap = new Map(todasLasZonas.map((z) => [z.id, z]));
 
   const clientes = await prisma.cliente.findMany({
     select: {
       id: true,
       salon: true,
-      provincia: true,
-      localidad: true,
       latitud: true,
       longitud: true,
       zonaId: true,
@@ -130,40 +156,63 @@ export async function recalcularAsignacionesZonas(radioKm: number = RADIO_MAXIMO
     let nuevaZonaId: string | null = null;
     let fuePorGps = false;
 
-    // 1. Si tiene coordenadas, buscar la zona más cercana dentro del radio (10 km)
-    if (cliente.latitud !== null && cliente.longitud !== null && zonasConGps.length > 0) {
-      let menorDistancia = Infinity;
-      let zonaCercana: Zona | null = null;
+    const tieneCoordenadas =
+      typeof cliente.latitud === 'number' &&
+      typeof cliente.longitud === 'number' &&
+      !isNaN(cliente.latitud) &&
+      !isNaN(cliente.longitud);
 
-      for (const zona of zonasConGps) {
-        if (zona.latitud === null || zona.longitud === null) continue;
-        const d = calcularDistanciaHaversineKm(
-          cliente.latitud,
-          cliente.longitud,
-          zona.latitud,
-          zona.longitud
-        );
-        if (d < menorDistancia) {
-          menorDistancia = d;
-          zonaCercana = zona;
+    if (tieneCoordenadas) {
+      // 1. Cliente con coordenadas: buscar la zona con distribuidor activo más cercana dentro del radio (50 km)
+      if (zonasActivasConGps.length > 0) {
+        let menorDistancia = Infinity;
+        let zonaCercanaId: string | null = null;
+
+        for (const zona of zonasActivasConGps) {
+          if (zona.latitud === null || zona.longitud === null) continue;
+          const d = calcularDistanciaHaversineKm(
+            cliente.latitud!,
+            cliente.longitud!,
+            zona.latitud,
+            zona.longitud
+          );
+
+          const esMenor = d < menorDistancia;
+          const esEmpate = Math.abs(d - menorDistancia) < 1e-6;
+          const ganaPorDesempate = esEmpate && zonaCercanaId !== null && zona.id < zonaCercanaId;
+
+          if (esMenor || ganaPorDesempate) {
+            menorDistancia = d;
+            zonaCercanaId = zona.id;
+          }
         }
-      }
 
-      if (zonaCercana && menorDistancia <= radioKm) {
-        nuevaZonaId = zonaCercana.id;
-        fuePorGps = true;
+        if (zonaCercanaId && menorDistancia <= radioKm) {
+          nuevaZonaId = zonaCercanaId;
+          fuePorGps = true;
+        } else {
+          nuevaZonaId = null;
+        }
+      } else {
+        nuevaZonaId = null;
       }
-    }
-
-    // 2. Si no tiene coordenadas (o quedó fuera de radio GPS pero su texto coincide con una zona)
-    if (!nuevaZonaId && (!cliente.latitud || !cliente.longitud)) {
-      const matchTexto = zonas.find(
-        (z) =>
-          z.provincia.trim().toLowerCase() === cliente.provincia.trim().toLowerCase() &&
-          z.localidad.trim().toLowerCase() === cliente.localidad.trim().toLowerCase()
-      );
-      if (matchTexto) {
-        nuevaZonaId = matchTexto.id;
+    } else {
+      // 2. Cliente sin coordenadas:
+      // Conservar asignación previa si la zona existe y su distribuidor está ACTIVO.
+      // Si el distribuidor no existe o no está ACTIVO, resetear a null.
+      if (cliente.zonaId) {
+        const zonaExistente = zonasMap.get(cliente.zonaId);
+        if (
+          zonaExistente &&
+          zonaExistente.distribuidor &&
+          zonaExistente.distribuidor.estado === 'ACTIVO'
+        ) {
+          nuevaZonaId = cliente.zonaId;
+        } else {
+          nuevaZonaId = null;
+        }
+      } else {
+        nuevaZonaId = null;
       }
     }
 
@@ -174,7 +223,7 @@ export async function recalcularAsignacionesZonas(radioKm: number = RADIO_MAXIMO
         data: { zonaId: nuevaZonaId },
       });
       reasignados++;
-      if (fuePorGps) asignadosPorGps++;
+      if (fuePorGps && nuevaZonaId) asignadosPorGps++;
     } else {
       sinCambios++;
       if (fuePorGps && nuevaZonaId) asignadosPorGps++;

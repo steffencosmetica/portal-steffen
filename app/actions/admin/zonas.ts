@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { Rol, EstadoZona } from '@prisma/client';
-import { recalcularAsignacionesZonas, RADIO_MAXIMO_KM } from '@/lib/services/geolocalizacion';
+import { recalcularAsignacionesZonas, RADIO_COBERTURA_DISTRIBUIDOR_KM } from '@/lib/services/geolocalizacion';
 
 export interface GuardarZonaData {
   provincia: string;
@@ -149,13 +149,11 @@ export async function guardarZonaAction(
       zonaFinalId = nueva.id;
     }
 
-    // Si la zona tiene GPS, sincronizar salones dentro del radio de 10 km
-    if (latitud !== null && longitud !== null) {
-      try {
-        await recalcularAsignacionesZonas(RADIO_MAXIMO_KM);
-      } catch (errSync) {
-        console.warn('Advertencia al sincronizar salones de la zona:', errSync);
-      }
+    // Sincronizar salones con la nueva configuración de zonas
+    try {
+      await recalcularAsignacionesZonas(RADIO_COBERTURA_DISTRIBUIDOR_KM);
+    } catch (errSync) {
+      console.warn('Advertencia al sincronizar salones de la zona:', errSync);
     }
 
     revalidatePath('/admin/zonas');
@@ -209,7 +207,7 @@ export async function recalcularZonasAction(): Promise<RecalcularZonasResultado>
       return { success: false, error: 'Permisos insuficientes. Se requiere rol de Administrador.' };
     }
 
-    const resultado = await recalcularAsignacionesZonas(RADIO_MAXIMO_KM);
+    const resultado = await recalcularAsignacionesZonas(RADIO_COBERTURA_DISTRIBUIDOR_KM);
 
     revalidatePath('/admin/zonas');
     revalidatePath('/admin/distribuidores');
@@ -258,6 +256,12 @@ export async function eliminarZonaAction(id: string): Promise<EliminarZonaResult
     await prisma.zona.delete({
       where: { id },
     });
+
+    try {
+      await recalcularAsignacionesZonas(RADIO_COBERTURA_DISTRIBUIDOR_KM);
+    } catch (errSync) {
+      console.warn('Advertencia al recalcular salones tras eliminar zona:', errSync);
+    }
 
     revalidatePath('/admin/zonas');
     revalidatePath('/admin/distribuidores');

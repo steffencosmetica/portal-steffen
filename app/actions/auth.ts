@@ -6,7 +6,7 @@
 import { createServerSupabaseClient, createAdminSupabaseClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import { Rol, EstadoCliente } from '@prisma/client';
-import { encontrarZonaMasCercana } from '@/lib/services/geolocalizacion';
+import { encontrarZonaMasCercana, RADIO_COBERTURA_DISTRIBUIDOR_KM } from '@/lib/services/geolocalizacion';
 import { headers } from 'next/headers';
 
 export interface RegistroFormState {
@@ -112,30 +112,18 @@ export async function registroProfesionalAction(
     // 2. Transacción en Prisma para crear Usuario y Cliente
     try {
       // Determinar la zona asignada:
-      // A) Si se aportaron coordenadas, buscar únicamente por cercanía geográfica (radio <= 10 km)
-      const coordenadasProvistas = latitud !== null && longitud !== null;
+      // Si se proporcionaron coordenadas válidas, buscar la zona más cercana con distribuidor activo (radio <= 50 km)
+      // Si no se proporcionaron coordenadas o queda fuera de los 50 km, asignar zonaId = null (SIN DISTRIBUIDOR)
       let zonaAsignadaId: string | null = null;
 
-      if (coordenadasProvistas) {
-        const zonaCercana = await encontrarZonaMasCercana(latitud, longitud);
+      if (latitud !== null && longitud !== null) {
+        const zonaCercana = await encontrarZonaMasCercana(latitud, longitud, RADIO_COBERTURA_DISTRIBUIDOR_KM);
         if (zonaCercana) {
           zonaAsignadaId = zonaCercana.id;
         }
       }
 
       await prisma.$transaction(async (tx) => {
-        // B) Si no se aportaron coordenadas en absoluto, buscar por coincidencia de texto como respaldo
-        if (!coordenadasProvistas && !zonaAsignadaId) {
-          const zonaPorTexto = await tx.zona.findFirst({
-            where: {
-              provincia: { equals: provincia, mode: 'insensitive' },
-              localidad: { equals: localidad, mode: 'insensitive' },
-            },
-          });
-          if (zonaPorTexto) {
-            zonaAsignadaId = zonaPorTexto.id;
-          }
-        }
 
         // Crear Usuario interno
         const usuario = await tx.usuario.create({

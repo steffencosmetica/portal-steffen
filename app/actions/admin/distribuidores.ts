@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { Rol } from '@prisma/client';
+import { recalcularAsignacionesZonas, RADIO_COBERTURA_DISTRIBUIDOR_KM } from '@/lib/services/geolocalizacion';
 
 export interface GuardarDistribuidorData {
   nombre: string;
@@ -108,9 +109,16 @@ export async function guardarDistribuidorAction(
         },
       });
 
+      try {
+        await recalcularAsignacionesZonas(RADIO_COBERTURA_DISTRIBUIDOR_KM);
+      } catch (errSync) {
+        console.warn('Advertencia al recalcular salones tras actualizar distribuidor:', errSync);
+      }
+
       revalidatePath('/admin/distribuidores');
       revalidatePath(`/admin/distribuidores/${id}`);
       revalidatePath('/admin/zonas');
+      revalidatePath('/admin/clientes');
       revalidatePath('/admin');
 
       return {
@@ -130,8 +138,15 @@ export async function guardarDistribuidorAction(
         },
       });
 
+      try {
+        await recalcularAsignacionesZonas(RADIO_COBERTURA_DISTRIBUIDOR_KM);
+      } catch (errSync) {
+        console.warn('Advertencia al recalcular salones tras crear distribuidor:', errSync);
+      }
+
       revalidatePath('/admin/distribuidores');
       revalidatePath('/admin/zonas');
+      revalidatePath('/admin/clientes');
       revalidatePath('/admin');
 
       return {
@@ -190,8 +205,15 @@ export async function eliminarDistribuidorAction(id: string): Promise<EliminarDi
       where: { id },
     });
 
+    try {
+      await recalcularAsignacionesZonas(RADIO_COBERTURA_DISTRIBUIDOR_KM);
+    } catch (errSync) {
+      console.warn('Advertencia al recalcular salones tras eliminar distribuidor:', errSync);
+    }
+
     revalidatePath('/admin/distribuidores');
     revalidatePath('/admin/zonas');
+    revalidatePath('/admin/clientes');
     revalidatePath('/admin');
 
     return { success: true };

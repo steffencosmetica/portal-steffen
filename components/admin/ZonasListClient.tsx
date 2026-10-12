@@ -86,7 +86,7 @@ export function ZonasListClient({ zonasIniciales }: ZonasListClientProps) {
   const [recalculando, setRecalculando] = useState<boolean>(false);
   const [isPending, startTransition] = useTransition();
 
-  // Recalcular asignaciones por radio de 10 km
+  // Recalcular asignaciones por radio de 50 km
   const handleRecalcularZonas = async () => {
     setMensajeError(null);
     setMensajeExito(null);
@@ -94,8 +94,9 @@ export function ZonasListClient({ zonasIniciales }: ZonasListClientProps) {
     try {
       const res = await recalcularZonasAction();
       if (res.success) {
+        const radio = res.radioKm || 50;
         setMensajeExito(
-          `¡Cálculo de 10 km completado! Se analizaron ${res.totalClientes || 0} salones (${res.reasignados || 0} actualizados, ${res.asignadosPorGps || 0} con cobertura por radio GPS ≤ 10 km).`
+          `¡Cálculo de ${radio} km completado! Se analizaron ${res.totalClientes || 0} salones (${res.reasignados || 0} actualizados, ${res.asignadosPorGps || 0} con cobertura por radio GPS ≤ ${radio} km).`
         );
         router.refresh();
       } else {
@@ -178,14 +179,14 @@ export function ZonasListClient({ zonasIniciales }: ZonasListClientProps) {
               onClick={handleRecalcularZonas}
               disabled={recalculando}
               className="inline-flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-800 disabled:bg-neutral-400 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-xl transition-all shadow-sm cursor-pointer disabled:cursor-not-allowed"
-              title="Recalcular asignación de salones a zonas según radio de 10 km"
+              title="Recalcular asignación de salones a zonas según radio de 50 km"
             >
               {recalculando ? (
                 <Loader2 className="w-4 h-4 animate-spin text-gold-400" />
               ) : (
                 <RotateCw className="w-4 h-4 text-gold-400" />
               )}
-              <span>{recalculando ? 'Calculando...' : 'Recalcular Salones (10 km)'}</span>
+              <span>{recalculando ? 'Calculando...' : 'Recalcular Salones (50 km)'}</span>
             </button>
 
             {/* Botón Nueva Zona */}
