@@ -192,18 +192,26 @@ export function generateGuestOrderToken(
 
 /**
  * Establece la cookie HttpOnly firmada en el cliente desde una Server Action o Route Handler.
- * Restringe la cookie al path `/pedido-enviado` con maxAge de 2 horas.
+ * Utiliza path: '/' para permitir su lectura desde /carrito al acumular pedidos consecutivos
+ * y purga cualquier cookie remanente del path anterior '/pedido-enviado'.
  */
 export async function setGuestOrderAuthCookie(pedidoId: string): Promise<void> {
   const cookieStore = await cookies();
   const currentToken = cookieStore.get(GUEST_ORDER_COOKIE_NAME)?.value;
   const newToken = generateGuestOrderToken(pedidoId, currentToken);
 
+  // Purgar cookie previa del path antiguo si existiera en el navegador
+  cookieStore.set(GUEST_ORDER_COOKIE_NAME, '', {
+    path: '/pedido-enviado',
+    maxAge: 0,
+  });
+
+  // Establecer cookie con path: '/'
   cookieStore.set(GUEST_ORDER_COOKIE_NAME, newToken, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    path: '/pedido-enviado',
+    path: '/',
     maxAge: GUEST_ORDER_MAX_AGE_SECONDS,
   });
 }
