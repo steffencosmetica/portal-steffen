@@ -37,6 +37,60 @@ interface CarritoClientProps {
   esSinDistribuidor?: boolean;
 }
 
+const STORAGE_KEY_INTENTO = 'steffen_idempotencia_intento_v1';
+
+interface IntentoConfirmacionStorage {
+  idempotencyKey: string;
+  cartFingerprint: string;
+  cotizacionToken: string;
+  buyerTag: string;
+  timestamp: number;
+}
+
+function calcularHuellaCarrito(items: { id: string; tipo?: string; variante?: string | null; cantidad: number }[]): string {
+  const normalizados = items.map((i) => ({
+    id: i.id,
+    tipo: i.tipo || 'PRODUCTO',
+    variante: i.variante || '',
+    cantidad: i.cantidad,
+  })).sort((a, b) => `${a.id}:${a.tipo}:${a.variante}`.localeCompare(`${b.id}:${b.tipo}:${b.variante}`));
+  return JSON.stringify(normalizados);
+}
+
+function obtenerIntentoPersistido(
+  cartFingerprint: string,
+  buyerTag: string
+): IntentoConfirmacionStorage | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY_INTENTO);
+    if (!raw) return null;
+    const parsed: IntentoConfirmacionStorage = JSON.parse(raw);
+    if (parsed.buyerTag !== buyerTag) return null;
+    if (parsed.cartFingerprint !== cartFingerprint) return null;
+    if (!parsed.idempotencyKey) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function guardarIntentoPersistido(intento: IntentoConfirmacionStorage): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(STORAGE_KEY_INTENTO, JSON.stringify(intento));
+  } catch (e) {
+    console.warn('No se pudo persistir el intento de confirmación en sessionStorage:', e);
+  }
+}
+
+function limpiarIntentoPersistido(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem(STORAGE_KEY_INTENTO);
+  } catch {}
+}
+
 export function CarritoClient({
   usuarioId,
   usuarioLogueado = false,
@@ -71,6 +125,17 @@ export function CarritoClient({
   const [isSincronizando, startFetchTransition] = useTransition();
   const [isConfirmando, setIsConfirmando] = useState<boolean>(false);
   const idempotencyKeyRef = useRef<string | null>(null);
+
+  const buyerTag = usuarioLogueado ? (usuarioId || 'usuario_registrado') : 'invitado';
+  const cartFingerprint = useMemo(() => calcularHuellaCarrito(items), [items]);
+
+  // Si se recarga la página o se navega, recuperar el intento persistido si coincide con el carrito actual
+  useEffect(() => {
+    const intentoExistente = obtenerIntentoPersistido(cartFingerprint, buyerTag);
+    if (intentoExistente) {
+      idempotencyKeyRef.current = intentoExistente.idempotencyKey;
+    }
+  }, [cartFingerprint, buyerTag]);
 
   // Datos para compradores invitados (sin sesión)
   const [datosInvitado, setDatosInvitado] = useState({
@@ -145,6 +210,7 @@ export function CarritoClient({
     tipo?: TipoItemCarrito,
     variante?: string | null
   ) => {
+    limpiarIntentoPersistido();
     idempotencyKeyRef.current = null;
     actualizarCantidad(id, nuevaCantidad, tipo, variante);
     setItemsDetalle((prev) => {
@@ -167,6 +233,7 @@ export function CarritoClient({
   };
 
   const handleQuitarItemCarrito = (id: string, tipo?: TipoItemCarrito, variante?: string | null) => {
+    limpiarIntentoPersistido();
     idempotencyKeyRef.current = null;
     quitarItem(id, tipo, variante);
     setItemsDetalle((prev) =>
@@ -273,29 +340,54 @@ export function CarritoClient({
     setErrorConfirmacion(null);
     setIsConfirmando(true);
 
-    if (!idempotencyKeyRef.current || requiereAceptacionCotizacion) {
-      idempotencyKeyRef.current = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null;
+    // Recuperar clave persistida para este intento o generar una nueva
+    let keyParaEnviar = idempotencyKeyRef.current;
+    let tokenParaEnviar = cotizacionVigente || '';
+
+    const intentoPersistido = obtenerIntentoPersistido(cartFingerprint, buyerTag);
+
+    if (intentoPersistido && !requiereAceptacionCotizacion) {
+      keyParaEnviar = intentoPersistido.idempotencyKey;
+      if (intentoPersistido.cotizacionToken) {
+        tokenParaEnviar = intentoPersistido.cotizacionToken;
+      }
+    } else {
+      keyParaEnviar = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : null;
+      if (keyParaEnviar) {
+        guardarIntentoPersistido({
+          idempotencyKey: keyParaEnviar,
+          cartFingerprint,
+          cotizacionToken: tokenParaEnviar,
+          buyerTag,
+          timestamp: Date.now(),
+        });
+      }
     }
+
+    idempotencyKeyRef.current = keyParaEnviar;
 
     try {
       const resultado = await confirmarPedidoAction(
         items,
         !usuarioLogueado ? datosInvitado : undefined,
         {
-          cotizacionToken: cotizacionVigente || '',
-          idempotencyKey: idempotencyKeyRef.current || undefined,
+          cotizacionToken: tokenParaEnviar,
+          idempotencyKey: keyParaEnviar || undefined,
         }
       );
 
       if (!resultado.success) {
         // Si requiere aceptación explícita de importes actualizados
         if (resultado.requiereAceptacionCotizacion) {
+          limpiarIntentoPersistido();
           idempotencyKeyRef.current = null;
           if (resultado.cotizacionActualizadaToken) {
             setCotizacionVigente(resultado.cotizacionActualizadaToken);
           }
           setRequiereAceptacionCotizacion(true);
-          setAvisoCambioCotizacion(resultado.error || 'Los importes de tu carrito han sido actualizados según las condiciones vigentes.');
+          setAvisoCambioCotizacion(
+            resultado.error || 'Los importes de tu carrito han sido actualizados según las condiciones vigentes.'
+          );
 
           if (resultado.importesActualizados) {
             setSubtotalPss(resultado.importesActualizados.subtotalGeneral);
@@ -309,6 +401,8 @@ export function CarritoClient({
         }
 
         if (resultado.itemsRemovidosIds && resultado.itemsRemovidosIds.length > 0) {
+          limpiarIntentoPersistido();
+          idempotencyKeyRef.current = null;
           resultado.itemsRemovidosIds.forEach((id) => quitarItem(id));
           setProductosRemovidosAviso((prev) => prev + resultado.itemsRemovidosIds!.length);
         }
@@ -318,6 +412,7 @@ export function CarritoClient({
       }
 
       if (resultado.pedidoId && resultado.whatsappUrl) {
+        limpiarIntentoPersistido();
         idempotencyKeyRef.current = null;
         vaciarCarrito();
         try {
@@ -329,7 +424,10 @@ export function CarritoClient({
       }
     } catch (err) {
       console.error('Error al confirmar pedido:', err);
-      setErrorConfirmacion('Ocurrió un error inesperado. Por favor intentá nuevamente.');
+      // Mantener la clave persistida para que un reintento o recarga recupere el pedido sin duplicarlo
+      setErrorConfirmacion(
+        'Ocurrió un error de conexión o tiempo de espera al confirmar. Si tu pedido ya fue procesado, al reintentar se recuperará automáticamente.'
+      );
       setIsConfirmando(false);
     }
   };

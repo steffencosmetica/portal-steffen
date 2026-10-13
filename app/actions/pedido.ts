@@ -324,7 +324,21 @@ export async function confirmarPedidoAction(
     // Permite recuperar el pedido exitoso incluso si la cotización ya venció después del commit
     const registroPrevio = await prisma.registroIdempotencia.findUnique({
       where: { clave: opciones.idempotencyKey },
-      include: { pedido: true },
+      include: {
+        pedido: {
+          include: {
+            cliente: {
+              include: {
+                zona: {
+                  include: {
+                    distribuidor: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
     if (registroPrevio) {
@@ -393,7 +407,21 @@ export async function confirmarPedidoAction(
             // B.1. Si mientras esperábamos el bloqueo otra transacción concurrente completó este intento
             const registroCompletadoEnEspera = await tx.registroIdempotencia.findUnique({
               where: { clave: opciones.idempotencyKey },
-              include: { pedido: true },
+              include: {
+                pedido: {
+                  include: {
+                    cliente: {
+                      include: {
+                        zona: {
+                          include: {
+                            distribuidor: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             });
             if (registroCompletadoEnEspera) {
               const verifAcceso = validarAccesoIdempotente(registroCompletadoEnEspera, {
@@ -585,7 +613,21 @@ export async function confirmarPedidoAction(
       // 1. Verificar primero si otra transacción concurrente completó el pedido para esta misma clave
       const registroConfirmado = await prisma.registroIdempotencia.findUnique({
         where: { clave: opciones.idempotencyKey },
-        include: { pedido: true },
+        include: {
+          pedido: {
+            include: {
+              cliente: {
+                include: {
+                  zona: {
+                    include: {
+                      distribuidor: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       });
 
       if (registroConfirmado) {

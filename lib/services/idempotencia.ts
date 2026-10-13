@@ -86,14 +86,19 @@ export function reconstruirResultadoDesdePedido(registro: any): ConfirmarPedidoR
   }
 
   let numeroWhatsapp: string;
-  try {
-    numeroWhatsapp = obtenerNumeroWhatsappOFallar();
-  } catch {
-    numeroWhatsapp = '+5491112345678';
+  const distribuidor = pedido.cliente?.zona?.distribuidor;
+  if (distribuidor && distribuidor.estado === 'ACTIVO' && distribuidor.whatsapp) {
+    numeroWhatsapp = distribuidor.whatsapp;
+  } else {
+    try {
+      numeroWhatsapp = obtenerNumeroWhatsappOFallar();
+    } catch {
+      numeroWhatsapp = '+5491112345678';
+    }
   }
 
   const whatsappUrl = pedido.mensajeWhatsappGenerado
-    ? generarUrlWhatsapp(numeroWhatsapp, pedido.mensajeWhatsappGenerado)
+    ? generarUrlWhatsapp(pedido.mensajeWhatsappGenerado, numeroWhatsapp)
     : '';
 
   return {
