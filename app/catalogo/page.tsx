@@ -217,40 +217,38 @@ export default async function CatalogoPage() {
           mostrarBotonCatalogo={false}
         />
 
-        {/* Banner de Envío Gratis exclusivo para clientes en sesión sin distribuidor asignado */}
-        {esSinDistribuidor && (
-          <div
-            id="banner-catalogo-envio-gratis"
-            className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
-          >
-            <div className="flex items-start sm:items-center gap-3.5">
-              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Truck className="w-5 h-5" />
-              </div>
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm sm:text-base font-bold text-emerald-950">
-                    Envío gratis superando los $250.000
-                  </h3>
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
-                    Venta Directa Fábrica
-                  </span>
-                </div>
-                <p className="text-xs text-emerald-800 font-normal leading-relaxed">
-                  Como salón profesional sin distribuidor asignado en tu zona, tus pedidos superiores a $250.000 cuentan con despacho 100% bonificado directo a tu salón.
-                </p>
-              </div>
+        {/* Banner de Envío Gratis (política comercial unificada) */}
+        <div
+          id="banner-catalogo-envio-gratis"
+          className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
+        >
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Truck className="w-5 h-5" />
             </div>
-            <Link
-              href="/carrito"
-              id="btn-catalogo-ir-carrito-envio-gratis"
-              className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-900 bg-white hover:bg-emerald-100/60 border border-emerald-300 px-3.5 py-2 rounded-xl transition-all shadow-xs shrink-0 self-start sm:self-auto"
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Ver Carrito</span>
-            </Link>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-bold text-emerald-950">
+                  Envío gratis superando los $250.000
+                </h3>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
+                  Beneficio Oficial
+                </span>
+              </div>
+              <p className="text-xs text-emerald-800 font-normal leading-relaxed">
+                ¡Tu pedido tiene envío gratis! Steffen bonifica el costo del envío al superar los $250.000. Para pedidos menores, el costo del envío se informará y coordinará por WhatsApp.
+              </p>
+            </div>
           </div>
-        )}
+          <Link
+            href="/carrito"
+            id="btn-catalogo-ir-carrito-envio-gratis"
+            className="inline-flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-900 bg-white hover:bg-emerald-100/60 border border-emerald-300 px-3.5 py-2 rounded-xl transition-all shadow-xs shrink-0 self-start sm:self-auto"
+          >
+            <ShoppingBag className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Ver Carrito</span>
+          </Link>
+        </div>
 
         <div className="space-y-2">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

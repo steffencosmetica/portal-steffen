@@ -361,23 +361,21 @@ export function CatalogoClient({
 
       {/* Barra de Controles: Buscador, Categorías y Orden */}
       <section className="bg-white border border-neutral-200 rounded-2xl p-4 md:p-6 shadow-sm space-y-4">
-        {/* Aviso de Envío Gratis exclusivo para clientes en sesión sin distribuidor */}
-        {esSinDistribuidor && (
-          <div
-            id="badge-catalogo-envio-gratis"
-            className="flex items-center justify-between gap-3 text-xs bg-emerald-50/80 border border-emerald-200/90 px-3.5 py-2 rounded-xl text-emerald-900"
-          >
-            <div className="flex items-center gap-2">
-              <Truck className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="font-semibold">
-                Envío gratis superando los $250.000 a tu salón
-              </span>
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded-full hidden sm:inline">
-              Directo de Fábrica
+        {/* Aviso de Envío Gratis (política comercial unificada) */}
+        <div
+          id="badge-catalogo-envio-gratis"
+          className="flex items-center justify-between gap-3 text-xs bg-emerald-50/80 border border-emerald-200/90 px-3.5 py-2 rounded-xl text-emerald-900"
+        >
+          <div className="flex items-center gap-2">
+            <Truck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-semibold">
+              Envío gratis en pedidos desde $250.000 bonificado por Steffen
             </span>
           </div>
-        )}
+          <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded-full hidden sm:inline">
+            A Todo el País
+          </span>
+        </div>
 
         {/* Fila 1: Buscador y Ordenamiento */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4">

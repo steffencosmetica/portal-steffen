@@ -85,18 +85,13 @@ export function reconstruirResultadoDesdePedido(registro: any): ConfirmarPedidoR
     };
   }
 
-  // 2. Reconstrucción de fallback: si no hay resultadoJson, resolver destino oficial sin números ficticios
+  // 2. Reconstrucción de fallback: todos los pedidos del portal se envían al WhatsApp oficial de Steffen
   let numeroWhatsapp: string | null = null;
-  const distribuidor = pedido.cliente?.zona?.distribuidor;
-  if (distribuidor && distribuidor.estado === 'ACTIVO' && distribuidor.whatsapp?.trim()) {
-    numeroWhatsapp = distribuidor.whatsapp.trim();
-  } else {
-    try {
-      numeroWhatsapp = obtenerNumeroWhatsappOFallar();
-    } catch (errConfig) {
-      console.warn('No se pudo determinar el número de WhatsApp oficial para el pedido:', errConfig);
-      numeroWhatsapp = null;
-    }
+  try {
+    numeroWhatsapp = obtenerNumeroWhatsappOFallar();
+  } catch (errConfig) {
+    console.warn('No se pudo determinar el número de WhatsApp oficial para el pedido:', errConfig);
+    numeroWhatsapp = null;
   }
 
   const whatsappUrl =

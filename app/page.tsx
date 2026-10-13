@@ -94,7 +94,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     },
     {
       titulo: 'Envíos a todo el país',
-      descripcion: 'Hacemos envíos a cada localidad y provincia de la Argentina.',
+      descripcion: 'Envío gratis bonificado al superar los $250.000. En pedidos menores, se coordina por WhatsApp.',
       icono: Truck,
     },
     {

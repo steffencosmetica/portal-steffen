@@ -19,6 +19,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { verifyGuestOrderCookieFromRequest } from '@/lib/security/guestOrderAuth';
+import { UMBRAL_ENVIO_GRATIS, MENSAJES_ENVIO } from '@/lib/constants/envio';
 
 export const dynamic = 'force-dynamic';
 
@@ -432,9 +433,11 @@ export default async function PedidoEnviadoPage({ params }: PedidoEnviadoPagePro
               </span>
             </div>
 
-            {/* Regla 3 */}
+            {/* Regla de Envío */}
             <p className="text-[11px] text-neutral-500 text-right italic">
-              El costo de envío será confirmado posteriormente por WhatsApp.
+              {totalNum >= UMBRAL_ENVIO_GRATIS
+                ? MENSAJES_ENVIO.GRATIS
+                : MENSAJES_ENVIO.A_COORDINAR}
             </p>
           </div>
         </div>

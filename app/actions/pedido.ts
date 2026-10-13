@@ -21,6 +21,7 @@ import {
   reconstruirResultadoDesdePedido,
   ejecutarConReintentoTransaccional,
 } from '@/lib/services/idempotencia';
+import { UMBRAL_ENVIO_GRATIS } from '@/lib/constants/envio';
 
 export interface ConfirmarPedidoItemInput {
   id: string;
@@ -178,7 +179,7 @@ function construirMensajeWhatsapp(params: {
       lineaDescuento +
       `• *TOTAL A TRANSFERIR: ${formatoMoneda(totalFinal)}*\n\n` +
       `🚚 *ENVÍO:*\n` +
-      `El costo de envío será confirmado posteriormente por WhatsApp.\n\n` +
+      `${totalFinal >= UMBRAL_ENVIO_GRATIS ? 'GRATIS — Bonificado por Steffen al superar los $250.000.' : 'El costo del envío será informado y coordinado por WhatsApp.'}\n\n` +
       `Aguardo los datos de transferencia para enviar el comprobante. ¡Muchas gracias!`
     );
   }
@@ -209,7 +210,7 @@ function construirMensajeWhatsapp(params: {
     lineaDescuento +
     `• *TOTAL A TRANSFERIR: ${formatoMoneda(totalFinal)}*\n\n` +
     `🚚 *ENVÍO:*\n` +
-    `El costo de envío será confirmado posteriormente por WhatsApp según la localidad de destino.\n\n` +
+    `${totalFinal >= UMBRAL_ENVIO_GRATIS ? 'GRATIS — Bonificado por Steffen al superar los $250.000.' : 'El costo del envío será informado y coordinado por WhatsApp.'}\n\n` +
     `Aguardo los datos de transferencia para enviar el comprobante. ¡Muchas gracias!`
   );
 }

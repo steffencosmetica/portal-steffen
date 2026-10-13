@@ -28,6 +28,7 @@ import {
   Truck,
   CheckCircle2
 } from 'lucide-react';
+import { UMBRAL_ENVIO_GRATIS, calificaParaEnvioGratis, MENSAJES_ENVIO } from '@/lib/constants/envio';
 
 interface CarritoClientProps {
   salonNombre?: string;
@@ -196,12 +197,10 @@ export function CarritoClient({
     return subtotalEfectivo;
   }, [descuentoInfo.total, subtotalEfectivo]);
 
-  // Beneficio de Envío Gratis exclusivo para clientes en sesión sin distribuidor asignado
-  const UMBRAL_ENVIO_GRATIS = 250000;
-  const esSinDistribuidorActivo = usuarioLogueado && esSinDistribuidorState;
+  // Política oficial de Envío Gratis: aplica a todos los pedidos del portal según totalFinal (totalEfectivo)
   const faltaParaEnvioGratis = Math.max(0, UMBRAL_ENVIO_GRATIS - totalEfectivo);
   const porcentajeProgresoEnvio = Math.min(100, Math.round((totalEfectivo / UMBRAL_ENVIO_GRATIS) * 100));
-  const calificaEnvioGratis = totalEfectivo >= UMBRAL_ENVIO_GRATIS;
+  const calificaEnvioGratis = calificaParaEnvioGratis(totalEfectivo);
 
   // Modificación optimista inmediata de cantidades
   const handleActualizarCantidadItem = (
@@ -503,8 +502,8 @@ export function CarritoClient({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* Columna Izquierda: Tabla/Lista de Ítems */}
         <div className="lg:col-span-2 space-y-4">
-          {/* Banner de progreso hacia Envío Gratis (exclusivo para clientes en sesión sin distribuidor asignado) */}
-          {esSinDistribuidorActivo && itemsParaMostrar.length > 0 && (
+          {/* Banner de progreso hacia Envío Gratis (universal para todos los pedidos) */}
+          {itemsParaMostrar.length > 0 && (
             <div
               id="banner-progreso-envio-gratis"
               className={`p-4 sm:p-4.5 rounded-2xl border transition-all shadow-xs ${
@@ -531,7 +530,7 @@ export function CarritoClient({
                   <div>
                     {calificaEnvioGratis ? (
                       <span className="text-sm font-bold block text-emerald-950">
-                        ¡Tu pedido califica para Envío Gratis!
+                        {MENSAJES_ENVIO.GRATIS}
                       </span>
                     ) : (
                       <span className="text-sm font-bold block text-emerald-950">
@@ -540,8 +539,8 @@ export function CarritoClient({
                     )}
                     <span className="text-xs text-emerald-700 block mt-0.5">
                       {calificaEnvioGratis
-                        ? 'Superaste los $250.000. El despacho a tu localidad corre 100% por cuenta de fábrica.'
-                        : 'Beneficio exclusivo directo de fábrica en compras superiores a $250.000.'}
+                        ? 'Al superar los $250.000, Steffen bonifica el 100% del costo del envío a todo el país.'
+                        : MENSAJES_ENVIO.A_COORDINAR}
                     </span>
                   </div>
                 </div>
@@ -787,31 +786,21 @@ export function CarritoClient({
               )}
 
               {/* Fila de Envío */}
-              {esSinDistribuidorActivo ? (
-                <div className="flex justify-between items-center text-xs py-1 border-t border-neutral-100 pt-2">
-                  <span className="text-neutral-700 flex items-center gap-1.5 font-medium">
-                    <Truck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Envío:</span>
+              <div className="flex justify-between items-center text-xs py-1 border-t border-neutral-100 pt-2">
+                <span className="text-neutral-700 flex items-center gap-1.5 font-medium">
+                  <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Envío:</span>
+                </span>
+                {calificaEnvioGratis ? (
+                  <span className="font-bold text-emerald-700 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md text-[11px]">
+                    ¡GRATIS!
                   </span>
-                  {calificaEnvioGratis ? (
-                    <span className="font-bold text-emerald-700 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md text-[11px]">
-                      ¡GRATIS!
-                    </span>
-                  ) : (
-                    <span className="text-neutral-600 font-medium text-[11px]">
-                      Faltan {formatoMoneda.format(faltaParaEnvioGratis)}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <div className="flex justify-between items-center text-xs py-1 text-neutral-500 border-t border-neutral-100 pt-2">
-                  <span className="flex items-center gap-1.5 font-medium">
-                    <Truck className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Envío:</span>
+                ) : (
+                  <span className="text-neutral-600 font-medium text-[11px]">
+                    A coordinar por WhatsApp
                   </span>
-                  <span className="text-[11px]">A coordinar</span>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* Total Final */}
               <div className="pt-3 border-t border-neutral-200 flex justify-between items-baseline">
@@ -985,26 +974,17 @@ export function CarritoClient({
 
             {/* Reglas Claras de Envío y Transferencia */}
             <div className="pt-4 border-t border-neutral-100 space-y-3">
-              {esSinDistribuidorActivo ? (
-                <div className="flex items-start gap-2.5 text-xs text-neutral-700 bg-emerald-50/70 border border-emerald-200/90 p-3 rounded-xl">
-                  <Truck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                  <p>
-                    <strong className="text-emerald-950 font-semibold">
-                      {calificaEnvioGratis ? 'Envío 100% bonificado:' : 'Envío gratis superando los $250.000:'}
-                    </strong>{' '}
-                    {calificaEnvioGratis
-                      ? 'Tu pedido superó los $250.000 en venta directa. No abonás costo de despacho.'
-                      : `Agregá ${formatoMoneda.format(faltaParaEnvioGratis)} más para no abonar costo de envío.`}
-                  </p>
-                </div>
-              ) : (
-                <div className="flex items-start gap-2.5 text-xs text-neutral-500">
-                  <PackageCheck className="w-4 h-4 text-gold-600 shrink-0 mt-0.5" />
-                  <p>
-                    <strong className="text-neutral-700 font-semibold">Envío a todo el país:</strong> El costo de envío se coordinará y confirmará directamente por WhatsApp según tu localidad o transporte preferido.
-                  </p>
-                </div>
-              )}
+              <div className="flex items-start gap-2.5 text-xs text-neutral-700 bg-emerald-50/70 border border-emerald-200/90 p-3 rounded-xl">
+                <Truck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <p>
+                  <strong className="text-emerald-950 font-semibold">
+                    {calificaEnvioGratis ? 'Envío gratis bonificado:' : 'Envío gratis desde $250.000:'}
+                  </strong>{' '}
+                  {calificaEnvioGratis
+                    ? MENSAJES_ENVIO.GRATIS
+                    : MENSAJES_ENVIO.A_COORDINAR}
+                </p>
+              </div>
 
               <div className="flex items-start gap-2.5 text-xs text-neutral-500">
                 <Sparkles className="w-4 h-4 text-gold-600 shrink-0 mt-0.5" />
