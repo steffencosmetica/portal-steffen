@@ -85,21 +85,24 @@ export function reconstruirResultadoDesdePedido(registro: any): ConfirmarPedidoR
     };
   }
 
-  let numeroWhatsapp: string;
+  // 2. Reconstrucción de fallback: si no hay resultadoJson, resolver destino oficial sin números ficticios
+  let numeroWhatsapp: string | null = null;
   const distribuidor = pedido.cliente?.zona?.distribuidor;
-  if (distribuidor && distribuidor.estado === 'ACTIVO' && distribuidor.whatsapp) {
-    numeroWhatsapp = distribuidor.whatsapp;
+  if (distribuidor && distribuidor.estado === 'ACTIVO' && distribuidor.whatsapp?.trim()) {
+    numeroWhatsapp = distribuidor.whatsapp.trim();
   } else {
     try {
       numeroWhatsapp = obtenerNumeroWhatsappOFallar();
-    } catch {
-      numeroWhatsapp = '+5491112345678';
+    } catch (errConfig) {
+      console.warn('No se pudo determinar el número de WhatsApp oficial para el pedido:', errConfig);
+      numeroWhatsapp = null;
     }
   }
 
-  const whatsappUrl = pedido.mensajeWhatsappGenerado
-    ? generarUrlWhatsapp(pedido.mensajeWhatsappGenerado, numeroWhatsapp)
-    : '';
+  const whatsappUrl =
+    pedido.mensajeWhatsappGenerado && numeroWhatsapp
+      ? generarUrlWhatsapp(pedido.mensajeWhatsappGenerado, numeroWhatsapp)
+      : '';
 
   return {
     success: true,

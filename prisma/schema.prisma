@@ -366,7 +366,7 @@ model RegistroIdempotencia {
   clienteId       String?   // ID del cliente registrado si la compra es autenticada
   guestSessionId  String?   // Identificador seguro de sesión anónima si es invitado
   pedidoId        String    @unique // Relación 1-a-1 obligatoria con el Pedido generado
-  pedido          Pedido    @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  pedido          Pedido    @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
   payloadHash     String    // Hash SHA-256 canónico del contenido (ítems, comprador, datos y cotización)
   resultadoJson   String?   @db.Text // Caché de la respuesta oficial serializada
   createdAt       DateTime  @default(now())
