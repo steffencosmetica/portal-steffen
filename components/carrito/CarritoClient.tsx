@@ -539,7 +539,7 @@ export function CarritoClient({
                     )}
                     <span className="text-xs text-emerald-700 block mt-0.5">
                       {calificaEnvioGratis
-                        ? 'Al superar los $250.000, Steffen bonifica el 100% del costo del envío a todo el país.'
+                        ? 'En pedidos desde $250.000, Steffen bonifica el 100% del costo del envío a todo el país.'
                         : MENSAJES_ENVIO.A_COORDINAR}
                     </span>
                   </div>

@@ -18,6 +18,6 @@ export function calificaParaEnvioGratis(totalFinal: number): boolean {
 export const MENSAJES_ENVIO = {
   GRATIS: '¡Tu pedido tiene envío gratis! Steffen bonifica el costo del envío.',
   A_COORDINAR: 'El costo del envío se informará y coordinará por WhatsApp.',
-  WHATSAPP_SECCION_GRATIS: 'GRATIS — Bonificado por Steffen al superar los $250.000.',
+  WHATSAPP_SECCION_GRATIS: 'GRATIS — Bonificado por Steffen en pedidos desde $250.000.',
   WHATSAPP_SECCION_A_COORDINAR: 'El costo del envío será informado y coordinado por WhatsApp.',
 } as const;

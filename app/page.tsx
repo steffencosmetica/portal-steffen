@@ -94,7 +94,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     },
     {
       titulo: 'Envíos a todo el país',
-      descripcion: 'Envío gratis bonificado al superar los $250.000. En pedidos menores, se coordina por WhatsApp.',
+      descripcion: 'Envío gratis bonificado en pedidos desde $250.000. En pedidos menores, se coordina por WhatsApp.',
       icono: Truck,
     },
     {

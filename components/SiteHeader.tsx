@@ -49,7 +49,7 @@ export function SiteHeader({
         className="w-full bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-700 text-white text-xs sm:text-sm font-bold py-2.5 px-4 rounded-2xl mb-4 flex items-center justify-center gap-2.5 shadow-sm border border-emerald-500/30 tracking-wide"
       >
         <Truck className="w-4 h-4 text-emerald-200 shrink-0" />
-        <span>Envío gratis superando los $250.000</span>
+        <span>Envío gratis desde $250.000</span>
         <span className="hidden md:inline text-emerald-200 font-normal text-xs">• Bonificado por Steffen a todo el país</span>
       </div>
 

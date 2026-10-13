@@ -229,14 +229,14 @@ export default async function CatalogoPage() {
             <div className="space-y-0.5">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm sm:text-base font-bold text-emerald-950">
-                  Envío gratis superando los $250.000
+                  Envío gratis desde $250.000
                 </h3>
                 <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-200 text-emerald-900 px-2 py-0.5 rounded-full">
                   Beneficio Oficial
                 </span>
               </div>
               <p className="text-xs text-emerald-800 font-normal leading-relaxed">
-                ¡Tu pedido tiene envío gratis! Steffen bonifica el costo del envío al superar los $250.000. Para pedidos menores, el costo del envío se informará y coordinará por WhatsApp.
+                ¡Tu pedido tiene envío gratis! Steffen bonifica el costo del envío en pedidos desde $250.000. Para pedidos menores, el costo del envío se informará y coordinará por WhatsApp.
               </p>
             </div>
           </div>
