@@ -27,3 +27,21 @@ CREATE INDEX "registros_idempotencia_guestSessionId_idx" ON "registros_idempoten
 
 -- AddForeignKey
 ALTER TABLE "registros_idempotencia" ADD CONSTRAINT "registros_idempotencia_pedidoId_fkey" FOREIGN KEY ("pedidoId") REFERENCES "pedidos"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- EnableRowLevelSecurity
+-- Sin politicas: la tabla solo es accesible desde el servidor via Prisma (rol propietario).
+ALTER TABLE "registros_idempotencia" ENABLE ROW LEVEL SECURITY;
+
+-- RevokePrivileges
+-- Supabase otorga por defecto todos los privilegios a anon y authenticated sobre tablas nuevas.
+REVOKE ALL ON TABLE "registros_idempotencia" FROM PUBLIC;
+DO $$
+DECLARE
+    rol TEXT;
+BEGIN
+    FOREACH rol IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+        IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = rol) THEN
+            EXECUTE format('REVOKE ALL ON TABLE "registros_idempotencia" FROM %I', rol);
+        END IF;
+    END LOOP;
+END $$;
