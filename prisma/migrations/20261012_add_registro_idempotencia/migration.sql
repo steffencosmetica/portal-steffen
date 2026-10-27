@@ -1,3 +1,6 @@
+-- Transaccion explicita: la tabla no queda creada sin RLS ni con privilegios publicos.
+BEGIN;
+
 -- CreateTable
 CREATE TABLE "registros_idempotencia" (
     "id" TEXT NOT NULL,
@@ -45,3 +48,5 @@ BEGIN
         END IF;
     END LOOP;
 END $$;
+
+COMMIT;
