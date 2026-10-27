@@ -1,0 +1,2 @@
+# Los checksums de Prisma Migrate se calculan sobre los bytes exactos: forzar LF.
+prisma/migrations/** text eol=lf
