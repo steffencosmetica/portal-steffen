@@ -38,11 +38,11 @@ export interface DatosInvitadoInput {
   provincia?: string;
 }
 
+// La identidad del comprador nunca viaja en estas opciones: se resuelve en el servidor
+// (sesión verificada + PostgreSQL para clientes, cookie HttpOnly emitida por el servidor para invitados).
 export interface OpcionesConfirmacionPedido {
   cotizacionToken?: string;
-  guestSessionIdOverride?: string;
   idempotencyKey?: string;
-  clienteOverride?: any;
 }
 
 export interface ConfirmarPedidoResultado {
@@ -243,17 +243,15 @@ export async function confirmarPedidoAction(
       throw configError;
     }
 
-    // 1. Obtener cliente autenticado en el servidor
-    let cliente: any = opciones?.clienteOverride || null;
-    if (!cliente) {
-      try {
-        const sesion = await obtenerSesionCliente();
-        if (sesion?.cliente) {
-          cliente = sesion.cliente;
-        }
-      } catch (authError) {
-        cliente = null;
+    // 1. Obtener cliente autenticado en el servidor (única fuente de identidad: sesión + PostgreSQL)
+    let cliente: any = null;
+    try {
+      const sesion = await obtenerSesionCliente();
+      if (sesion?.cliente) {
+        cliente = sesion.cliente;
       }
+    } catch (authError) {
+      cliente = null;
     }
     if (cliente && cliente.estadoCliente === EstadoCliente.BLOQUEADO) {
       return {
@@ -265,8 +263,16 @@ export async function confirmarPedidoAction(
     // 2. Identificación y datos obligatorios de invitados
     let guestSessionId: string | null = null;
     if (!cliente) {
-      const cookieSessionId = await getGuestSessionId();
-      guestSessionId = cookieSessionId || opciones?.guestSessionIdOverride || null;
+      // Solo la cookie HttpOnly emitida por el servidor al cotizar identifica al invitado
+      const cookieSessionId = (await getGuestSessionId())?.trim() || null;
+      if (!cookieSessionId || cookieSessionId.length < 16) {
+        return {
+          success: false,
+          error: 'Tu sesión de compra expiró. Por favor actualizá tu carrito antes de confirmar el pedido.',
+          requiereAceptacionCotizacion: true,
+        };
+      }
+      guestSessionId = cookieSessionId;
 
       const nombreValido = datosInvitado?.nombre && datosInvitado.nombre.trim().length >= 2;
       const localidadValida = datosInvitado?.localidad && datosInvitado.localidad.trim().length >= 2;

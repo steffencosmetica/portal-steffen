@@ -277,7 +277,7 @@ export function compararCotizacionConLiquidacion(params: {
       };
     }
 
-    if (cotizacion.guestSessionId && (!guestSessionId || guestSessionId !== cotizacion.guestSessionId)) {
+    if (!cotizacion.guestSessionId || !guestSessionId || guestSessionId !== cotizacion.guestSessionId) {
       diferencias.push({
         campo: 'guestSessionId',
         esperado: cotizacion.guestSessionId,
