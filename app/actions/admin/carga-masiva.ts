@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { Rol, Prisma } from '@prisma/client';
 import { CATEGORIAS_PRODUCTO, CategoriaProducto } from '@/lib/constants/categorias';
-import { almacenarBufferImagenProducto } from '@/app/actions/admin/imagenes';
+import { almacenarBufferImagenProducto } from '@/lib/services/imagenesProducto';
 import { parsearVariantes, serializarVariantes } from '@/lib/utils/variantes';
 
 // -----------------------------------------------------------------------------

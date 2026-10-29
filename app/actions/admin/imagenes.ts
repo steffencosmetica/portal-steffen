@@ -1,23 +1,14 @@
 'use server';
 
-import { createServerSupabaseClient, createAdminSupabaseClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
 import { Rol } from '@prisma/client';
-
-export interface SubirImagenResultado {
-  success: boolean;
-  url?: string;
-  error?: string;
-}
-
-const MIME_TYPES_PERMITIDOS = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
-
-const EXTENSIONES_MIME: Record<string, string> = {
-  'image/jpeg': '.jpg',
-  'image/png': '.png',
-  'image/webp': '.webp',
-};
+import {
+  almacenarBufferImagenProducto,
+  MAX_BYTES,
+  MIME_TYPES_PERMITIDOS,
+  type SubirImagenResultado,
+} from '@/lib/services/imagenesProducto';
 
 /**
  * Server Action para subir imágenes de productos a Supabase Storage (bucket 'productos-imagenes').
@@ -81,15 +72,11 @@ export async function subirImagenProductoAction(formData: FormData): Promise<Sub
       };
     }
 
-    // 6. Generar nombre de archivo único
-    const extension = EXTENSIONES_MIME[file.type] || '.jpg';
-    const nombreArchivo = `producto-${crypto.randomUUID()}${extension}`;
-
-    // 7. Convertir a buffer para la subida
+    // 6. Convertir a buffer para la subida
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 8. Subida mediante cliente admin con Service Role
+    // 7. Subida mediante cliente admin con Service Role
     return await almacenarBufferImagenProducto(buffer, file.type);
   } catch (error) {
     console.error('Error inesperado en subirImagenProductoAction:', error);
@@ -100,69 +87,3 @@ export async function subirImagenProductoAction(formData: FormData): Promise<Sub
   }
 }
 
-/**
- * Función auxiliar para subir un Buffer de imagen directamente a Supabase Storage.
- * Reutilizada por subida individual y por carga masiva con URLs externas.
- */
-export async function almacenarBufferImagenProducto(
-  buffer: Buffer,
-  mimeType: string
-): Promise<SubirImagenResultado> {
-  try {
-    if (!MIME_TYPES_PERMITIDOS.includes(mimeType)) {
-      return {
-        success: false,
-        error: `Formato de imagen no permitido (${mimeType}). Solo se aceptan JPEG, PNG o WebP.`,
-      };
-    }
-
-    if (buffer.length > MAX_BYTES) {
-      const tamanoMb = (buffer.length / (1024 * 1024)).toFixed(2);
-      return {
-        success: false,
-        error: `El archivo supera el límite de 5 MB (tamaño actual: ${tamanoMb} MB).`,
-      };
-    }
-
-    const extension = EXTENSIONES_MIME[mimeType] || '.jpg';
-    const nombreArchivo = `producto-${crypto.randomUUID()}${extension}`;
-
-    const supabaseAdmin = createAdminSupabaseClient();
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from('productos-imagenes')
-      .upload(nombreArchivo, buffer, {
-        contentType: mimeType,
-        upsert: false,
-      });
-
-    if (uploadError) {
-      console.error('Error al subir imagen a Supabase Storage:', uploadError);
-      return {
-        success: false,
-        error: `Error al almacenar la imagen: ${uploadError.message}`,
-      };
-    }
-
-    const { data: urlData } = supabaseAdmin.storage
-      .from('productos-imagenes')
-      .getPublicUrl(nombreArchivo);
-
-    if (!urlData || !urlData.publicUrl) {
-      return {
-        success: false,
-        error: 'No se pudo generar la URL pública de la imagen subida.',
-      };
-    }
-
-    return {
-      success: true,
-      url: urlData.publicUrl,
-    };
-  } catch (error) {
-    console.error('Error inesperado en almacenarBufferImagenProducto:', error);
-    return {
-      success: false,
-      error: 'Error inesperado al guardar la imagen en el almacenamiento.',
-    };
-  }
-}
