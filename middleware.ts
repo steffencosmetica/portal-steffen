@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getCleanSupabaseUrl, getCleanSupabaseKey } from '@/lib/supabase/server';
+import { obtenerRutaInternaSegura } from '@/lib/security/redirecciones';
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -73,19 +74,16 @@ export async function middleware(request: NextRequest) {
 
   // 2. Si ya está autenticado e intenta ir a login o registro con sesión activa
   if (user && (pathname === '/login' || pathname === '/registro')) {
-    // Si viene con redirect param, respetar el redirect
-    const redirectParam = request.nextUrl.searchParams.get('redirect');
-    if (redirectParam && redirectParam.startsWith('/')) {
+    // Si viene con redirect param, respetar el redirect (solo rutas internas: //dominio o /\dominio se ignoran)
+    const redirectParam = obtenerRutaInternaSegura(request.nextUrl.searchParams.get('redirect'));
+    if (redirectParam) {
       // Si el redirect es hacia admin pero el usuario no es ADMIN, redirigir al catálogo
       if (redirectParam.startsWith('/admin') && userRol !== 'ADMIN') {
         const url = request.nextUrl.clone();
         url.pathname = '/catalogo';
         return NextResponse.redirect(url);
       }
-      const url = request.nextUrl.clone();
-      url.pathname = redirectParam;
-      url.searchParams.delete('redirect');
-      return NextResponse.redirect(url);
+      return NextResponse.redirect(new URL(redirectParam, request.nextUrl.origin));
     }
 
     const url = request.nextUrl.clone();

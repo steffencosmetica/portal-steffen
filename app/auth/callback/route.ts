@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { type EmailOtpType } from '@supabase/supabase-js';
+import { resolverRutaInternaSegura } from '@/lib/security/redirecciones';
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
@@ -19,7 +20,8 @@ export async function GET(request: Request) {
     defaultNext = '/cuenta-confirmada';
   }
 
-  const next = rawNext || defaultNext;
+  // Solo se permiten rutas internas: un ?next= externo (https://..., //..., /\...) vuelve al destino por defecto
+  const next = resolverRutaInternaSegura(rawNext, defaultNext);
 
   // Si Supabase devuelve un error en el enlace (por ejemplo enlace expirado)
   if (error) {

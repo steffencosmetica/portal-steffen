@@ -9,6 +9,7 @@ import { Rol, EstadoCliente } from '@prisma/client';
 import { encontrarZonaMasCercana, calcularDistanciaHaversineKm, RADIO_COBERTURA_DISTRIBUIDOR_KM } from '@/lib/services/geolocalizacion';
 import { geocodificarUbicacion, esCoordenadaValidaArgentina, ResultadoGeocodificacion } from '@/lib/services/geocoding';
 import { headers } from 'next/headers';
+import { obtenerRutaInternaSegura } from '@/lib/security/redirecciones';
 
 export interface RegistroFormState {
   success?: boolean;
@@ -394,8 +395,9 @@ export async function loginAction(
         };
       }
 
-      const redirectCustom = (formData.get('redirect') as string)?.trim();
-      if (redirectCustom && redirectCustom.startsWith('/') && !redirectCustom.startsWith('//')) {
+      // Solo rutas internas: se rechazan destinos externos y variantes como /\dominio.com
+      const redirectCustom = obtenerRutaInternaSegura(formData.get('redirect'));
+      if (redirectCustom) {
         return {
           success: true,
           redirectTo: redirectCustom,
