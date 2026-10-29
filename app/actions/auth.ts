@@ -10,6 +10,77 @@ import { encontrarZonaMasCercana, calcularDistanciaHaversineKm, RADIO_COBERTURA_
 import { geocodificarUbicacion, esCoordenadaValidaArgentina, ResultadoGeocodificacion } from '@/lib/services/geocoding';
 import { headers } from 'next/headers';
 import { obtenerRutaInternaSegura } from '@/lib/security/redirecciones';
+import type { User } from '@supabase/supabase-js';
+
+const MENSAJE_EMAIL_YA_REGISTRADO =
+  'Ya existe una cuenta registrada con este email. Iniciá sesión o usá otro email.';
+
+// Tolerancia de desfase de reloj entre este servidor y Supabase Auth al determinar
+// si una cuenta de auth.users fue creada por el registro en curso.
+const MARGEN_RELOJ_REGISTRO_MS = 30_000;
+
+/**
+ * Indica si el usuario devuelto por signUp fue creado por este intento de registro.
+ * Supabase devuelve el usuario ya existente (mismo id) cuando el email está registrado pero sin confirmar,
+ * por lo que no alcanza con que signUp responda sin error.
+ */
+function fueCreadoEnEsteRegistro(user: User, email: string, inicioRegistroMs: number): boolean {
+  const creadoMs = user.created_at ? new Date(user.created_at).getTime() : NaN;
+  return (
+    user.email?.toLowerCase() === email &&
+    Number.isFinite(creadoMs) &&
+    creadoMs >= inicioRegistroMs - MARGEN_RELOJ_REGISTRO_MS
+  );
+}
+
+/**
+ * Rollback de un registro fallido: elimina de Supabase Auth solo la cuenta creada por este mismo intento.
+ * Antes de eliminar vuelve a leer la cuenta con Service Role y verifica email, fecha de creación
+ * y que no esté vinculada a ningún usuario de Prisma. Ante cualquier duda, no elimina.
+ */
+async function revertirUsuarioAuthDeRegistro(
+  authUserId: string,
+  email: string,
+  inicioRegistroMs: number
+): Promise<void> {
+  try {
+    const supabaseAdmin = createAdminSupabaseClient();
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(authUserId);
+
+    if (error || !data?.user || data.user.id !== authUserId) {
+      console.error(`Rollback omitido: no se pudo verificar el usuario ${authUserId} en Supabase Auth.`, error);
+      return;
+    }
+
+    if (!fueCreadoEnEsteRegistro(data.user, email, inicioRegistroMs)) {
+      console.warn(
+        `[SECURITY] Rollback omitido: el usuario ${authUserId} no fue creado por este intento de registro.`
+      );
+      return;
+    }
+
+    const usuarioVinculado = await prisma.usuario.findUnique({
+      where: { authUserId },
+      select: { id: true },
+    });
+
+    if (usuarioVinculado) {
+      console.warn(
+        `[SECURITY] Rollback omitido: el usuario ${authUserId} ya está vinculado a un usuario del portal.`
+      );
+      return;
+    }
+
+    const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(authUserId);
+    if (deleteError) {
+      console.error('Fallo crítico al realizar rollback en Supabase Auth:', deleteError);
+      return;
+    }
+    console.log(`Rollback completado: usuario ${authUserId} eliminado de Supabase Auth.`);
+  } catch (rollbackError) {
+    console.error('Fallo crítico al realizar rollback en Supabase Auth:', rollbackError);
+  }
+}
 
 export interface RegistroFormState {
   success?: boolean;
@@ -29,7 +100,8 @@ export interface LoginFormState {
  * 2. En una transacción atómica de Prisma, crea el registro en 'usuarios' y 'clientes'.
  * 3. Con Service Role (Supabase Admin), actualiza app_metadata: { rol: 'CLIENTE_PROFESIONAL' }
  *    (inmutable desde el cliente, utilizado para autorización y middleware).
- * 4. Si la transacción de Prisma falla, elimina el usuario de Supabase Auth con la Service Role Key para evitar usuarios huérfanos.
+ * 4. Si la transacción de Prisma falla, elimina el usuario de Supabase Auth con la Service Role Key para evitar usuarios huérfanos,
+ *    solo después de verificar que esa cuenta fue creada por este mismo intento (nunca una cuenta preexistente).
  */
 export async function registroProfesionalAction(
   prevState: RegistroFormState | null,
@@ -71,6 +143,17 @@ export async function registroProfesionalAction(
       return { error: 'La contraseña debe tener al menos 6 caracteres.' };
     }
 
+    // Si el email ya pertenece a un usuario del portal (confirmado o pendiente de confirmación),
+    // no se intenta un nuevo signUp: evita duplicados y cualquier rollback sobre la cuenta existente.
+    const usuarioExistente = await prisma.usuario.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
+    if (usuarioExistente) {
+      return { error: MENSAJE_EMAIL_YA_REGISTRADO };
+    }
+
     const supabase = await createServerSupabaseClient();
 
     // Determinar la URL base de redirección de confirmación
@@ -81,6 +164,7 @@ export async function registroProfesionalAction(
     const emailRedirectUrl = `${appOrigin}/auth/callback?next=/cuenta-confirmada`;
 
     // 1. Crear usuario en Supabase Auth (solo metadatos no críticos de presentación en user_metadata)
+    const inicioRegistroMs = Date.now();
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -100,14 +184,23 @@ export async function registroProfesionalAction(
         authError?.message?.toLowerCase().includes('already registered') ||
         authError?.message?.toLowerCase().includes('already exists')
       ) {
-        return {
-          error: 'Ya existe una cuenta registrada con este email. Iniciá sesión o usá otro email.',
-        };
+        return { error: MENSAJE_EMAIL_YA_REGISTRADO };
       }
 
       return {
         error: authError?.message || 'No se pudo crear la cuenta en el servicio de autenticación.',
       };
+    }
+
+    // Email ya confirmado: Supabase responde con un usuario ficticio sin identidades (protección anti-enumeración).
+    // Email registrado sin confirmar: Supabase devuelve la cuenta existente, que no pertenece a este intento.
+    // En ambos casos no se crean registros en Prisma ni se elimina nada.
+    if (
+      !authData.user.identities ||
+      authData.user.identities.length === 0 ||
+      !fueCreadoEnEsteRegistro(authData.user, email, inicioRegistroMs)
+    ) {
+      return { error: MENSAJE_EMAIL_YA_REGISTRADO };
     }
 
     const authUserId = authData.user.id;
@@ -226,14 +319,9 @@ export async function registroProfesionalAction(
     } catch (prismaError) {
       console.error('Error al guardar en base de datos tras signUp. Iniciando rollback...', prismaError);
 
-      // Rollback: eliminar usuario huérfano de Supabase Auth usando el cliente Admin (Service Role)
-      try {
-        const supabaseAdmin = createAdminSupabaseClient();
-        await supabaseAdmin.auth.admin.deleteUser(authUserId);
-        console.log(`Rollback completado: usuario ${authUserId} eliminado de Supabase Auth.`);
-      } catch (rollbackError) {
-        console.error('Fallo crítico al realizar rollback en Supabase Auth:', rollbackError);
-      }
+      // Rollback: eliminar usuario huérfano de Supabase Auth usando el cliente Admin (Service Role),
+      // solo si se verifica que fue creado por este mismo intento de registro
+      await revertirUsuarioAuthDeRegistro(authUserId, email, inicioRegistroMs);
 
       return {
         error: 'Hubo un error al registrar los datos del salón en la base de datos. Por favor intentá nuevamente.',
@@ -268,9 +356,7 @@ export async function registroProfesionalAction(
       error?.message?.toLowerCase().includes('already registered') ||
       error?.message?.toLowerCase().includes('already exists')
     ) {
-      return {
-        error: 'Ya existe una cuenta registrada con este email. Iniciá sesión o usá otro email.',
-      };
+      return { error: MENSAJE_EMAIL_YA_REGISTRADO };
     }
 
     return {
